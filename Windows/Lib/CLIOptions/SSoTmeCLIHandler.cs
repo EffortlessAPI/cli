@@ -49,7 +49,7 @@ namespace SSoTme.OST.Lib.CLIOptions
     public partial class SSoTmeCLIHandler
     {
         // build scripts will make this match version from package.json
-        public string CLI_VERSION = "2026-04-25.21.50";
+        public string CLI_VERSION = "2026-04-26.18.29";
 
         // url to the latest version of the transpiler-lister service
         // Bootstrap URL: used only on first-ever run or when tool_urls.json is missing/corrupt.
@@ -681,10 +681,6 @@ namespace SSoTme.OST.Lib.CLIOptions
                     Console.WriteLine(parser.UsageInfo.GetHeaderAsString(helpWidth));
                     Console.WriteLine("\n\nSyntax: effortless [account/]transpiler [Options]\n\n");
                     Console.WriteLine(parser.UsageInfo.GetOptionsAsString(helpWidth));
-                    if (!Console.IsInputRedirected && !Console.IsOutputRedirected)
-                    {
-                        Console.ReadKey();
-                    }
                     this.SuppressTranspile = true;
                 }
                 else if (this.info)
@@ -3307,9 +3303,9 @@ Seed Url: ");
                 return;
             }
             var oldVersion = matched.PinnedVersion ?? matched.LastVersionUsed ?? "(unpinned)";
-            matched.PinnedVersion = newVersion;
+            matched.PinnedVersion = null;
             project.Save();
-            Console.WriteLine($"Upgraded {toolName}: {oldVersion} → {newVersion}");
+            Console.WriteLine($"Upgraded {toolName}: {oldVersion} → HEAD ({newVersion}, unpinned — will track latest)");
         }
 
         /// <summary>
@@ -3366,14 +3362,14 @@ Seed Url: ");
                 var newVersion = this.ResolvedVersionKey;
                 var oldVersion = pt.PinnedVersion ?? pt.LastVersionUsed ?? "(unpinned)";
 
-                if (String.Equals(oldVersion, newVersion))
+                if (pt.PinnedVersion == null && String.Equals(pt.LastVersionUsed, newVersion))
                 {
-                    Console.WriteLine($"  OK   {cmdTool} — already at {newVersion}");
+                    Console.WriteLine($"  OK   {cmdTool} — already unpinned at HEAD ({newVersion})");
                     continue;
                 }
 
-                pt.PinnedVersion = newVersion;
-                Console.WriteLine($"  UP   {cmdTool}: {oldVersion} → {newVersion}");
+                pt.PinnedVersion = null;
+                Console.WriteLine($"  UP   {cmdTool}: {oldVersion} → HEAD ({newVersion}, unpinned)");
                 upgraded++;
             }
 
