@@ -122,10 +122,15 @@ public sealed class BuildCommand
                             // writes its result back to the same relative path it
                             // was given, so an absolute -i would land a duplicate
                             // at the project root instead of upserting in place.
-                            var previousPath = project.CurrentPath;
-                            project.CurrentPath = fileInfo.Directory!.FullName;
+                            // BuildRunner runs each step from its RelativePath by
+                            // setting Environment.CurrentDirectory; do the same so
+                            // a watched file behaves exactly like a registered
+                            // compile-rulebook step.
+                            var originalDirectory = Environment.CurrentDirectory;
                             try
                             {
+                                Environment.CurrentDirectory =
+                                    fileInfo.Directory!.FullName;
                                 result = _runCommandLine(
                                     $"compile-rulebook -i {fileInfo.Name}",
                                     project,
@@ -134,7 +139,7 @@ public sealed class BuildCommand
                             }
                             finally
                             {
-                                project.CurrentPath = previousPath;
+                                Environment.CurrentDirectory = originalDirectory;
                             }
                         }
                         else

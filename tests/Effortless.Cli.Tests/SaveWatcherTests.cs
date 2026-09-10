@@ -133,6 +133,56 @@ public sealed class SaveWatcherTests
         Assert.Equal(3, watcher.RunCount);
     }
 
+    [Fact(DisplayName = "unit-build-on-save-shares-guard: buildOnSave uses the same re-entrancy guard")]
+    public async Task BuildOnSaveUsesTheSameReentrancyGuard()
+    {
+        // -compileOnSave and -buildOnSave differ only in the action they invoke;
+        // both route through this one guard, so the "never twice at once" and
+        // coalescing guarantees are identical for a full build.
+        var watcher = NoDelayWatcher();
+        var release = new TaskCompletionSource();
+        var started = 0;
+        var concurrent = 0;
+        var maxConcurrent = 0;
+        var gate = new object();
+
+        async Task Build(CancellationToken _)
+        {
+            lock (gate)
+            {
+                concurrent++;
+                maxConcurrent = Math.Max(maxConcurrent, concurrent);
+            }
+
+            try
+            {
+                if (Interlocked.Increment(ref started) == 1)
+                {
+                    await release.Task;
+                }
+            }
+            finally
+            {
+                lock (gate)
+                {
+                    concurrent--;
+                }
+            }
+        }
+
+        var first = watcher.OnSavedAsync(Build);
+        for (var i = 0; i < 5; i++)
+        {
+            Assert.False(await watcher.OnSavedAsync(Build));
+        }
+
+        release.SetResult();
+        await first;
+
+        Assert.Equal(1, maxConcurrent);
+        Assert.Equal(2, watcher.RunCount);
+    }
+
     [Fact(DisplayName = "unit-save-watcher-missing-file: watching a file that does not exist fails clearly")]
     public async Task WatchingMissingFileFailsClearly()
     {

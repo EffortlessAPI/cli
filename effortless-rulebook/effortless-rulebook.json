@@ -11438,6 +11438,20 @@
         "Description": ""
       },
       {
+        "TestCaseId": "unit-build-on-save-shares-guard",
+        "Suite": "unit-core",
+        "PrimaryOption": "buildOnSave",
+        "Title": "buildOnSave uses the same re-entrancy guard",
+        "Given": "a run is in flight under the shared watcher",
+        "When": "more saves arrive",
+        "Then": "no concurrent run starts and the burst coalesces to one follow-up",
+        "Priority": "P0",
+        "Interactive": false,
+        "Slow": false,
+        "Status": "green",
+        "Description": ""
+      },
+      {
         "TestCaseId": "unit-save-watcher-missing-file",
         "Suite": "unit-core",
         "PrimaryOption": "compileOnSave",
