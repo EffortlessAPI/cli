@@ -24,6 +24,25 @@ public sealed class BuildCommand
         bool all,
         bool withSubprojects = false)
     {
+        // -compileOnSave and -buildOnSave are the same watcher over the same
+        // file; they differ only in what runs on each save. compileOnSave runs
+        // compile-rulebook against that one file (the authoring inner loop);
+        // buildOnSave runs the whole build (downstream artifacts follow too).
+        var compileOnSave = invocation.Options.compileOnSave;
+        var buildOnSave = invocation.Options.buildOnSave;
+        if (!string.IsNullOrWhiteSpace(compileOnSave)
+            || !string.IsNullOrWhiteSpace(buildOnSave))
+        {
+            return RunOnSave(
+                invocation,
+                all,
+                withSubprojects,
+                !string.IsNullOrWhiteSpace(compileOnSave)
+                    ? compileOnSave
+                    : buildOnSave,
+                compileOnly: !string.IsNullOrWhiteSpace(compileOnSave));
+        }
+
         if (string.IsNullOrWhiteSpace(
                 invocation.Options.buildOnTrigger))
         {
@@ -48,6 +67,100 @@ public sealed class BuildCommand
                 })
             .GetAwaiter()
             .GetResult();
+        return 0;
+    }
+
+    /// <summary>
+    /// Watches one file and recompiles/rebuilds on each save until Ctrl+C.
+    /// The re-entrancy rules (never two runs at once, a burst of saves
+    /// coalescing into exactly one follow-up run, self-writes ignored) all live
+    /// in <see cref="SaveWatcher"/>; this method only supplies the action.
+    /// </summary>
+    private int RunOnSave(
+        CliInvocation invocation,
+        bool all,
+        bool withSubprojects,
+        string fileToWatch,
+        bool compileOnly)
+    {
+        var project = invocation.Project!;
+        var fileInfo = new FileInfo(
+            Path.IsPathRooted(fileToWatch)
+                ? fileToWatch
+                : Path.Combine(project.RootPath, fileToWatch));
+
+        if (!fileInfo.Exists)
+        {
+            CliLog.LogLine(
+                $"Cannot watch '{fileInfo.FullName}': the file does not exist.",
+                ConsoleColor.Red);
+            return 1;
+        }
+
+        var watcher = new SaveWatcher(writeLine: line => CliLog.LogLine(line));
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            cts.Cancel();
+        };
+
+        try
+        {
+            watcher.WatchAsync(
+                    fileInfo.FullName,
+                    _ =>
+                    {
+                        int result;
+                        if (compileOnly)
+                        {
+                            // Just this one file through compile-rulebook, not
+                            // the project's whole transpiler chain.
+                            //
+                            // The input must be named RELATIVE to the file's own
+                            // directory, and run from there: compile-rulebook
+                            // writes its result back to the same relative path it
+                            // was given, so an absolute -i would land a duplicate
+                            // at the project root instead of upserting in place.
+                            var previousPath = project.CurrentPath;
+                            project.CurrentPath = fileInfo.Directory!.FullName;
+                            try
+                            {
+                                result = _runCommandLine(
+                                    $"compile-rulebook -i {fileInfo.Name}",
+                                    project,
+                                    invocation.Options.continueOnError,
+                                    invocation.BuildErrorLog);
+                            }
+                            finally
+                            {
+                                project.CurrentPath = previousPath;
+                            }
+                        }
+                        else
+                        {
+                            result = RunOnce(invocation, all, withSubprojects);
+                        }
+
+                        if (result != 0)
+                        {
+                            throw new InvalidOperationException(
+                                compileOnly
+                                    ? $"Compile exited with code {result}."
+                                    : $"Build exited with code {result}.");
+                        }
+
+                        return Task.CompletedTask;
+                    },
+                    cts.Token)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+            // Ctrl+C is the documented way to stop watching, not a failure.
+        }
+
         return 0;
     }
 

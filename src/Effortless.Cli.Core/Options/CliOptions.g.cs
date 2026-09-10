@@ -46,6 +46,12 @@ public class CliOptions
     [CommandLineOption(Description = "Builds whenever a trigger is invoked (see readme for URL)", MinOccurs = 0, Aliases = "bot")]
     public string buildOnTrigger { get; set; }
 
+    [CommandLineOption(Description = "Recompile one rulebook whenever it is saved", MinOccurs = 0, Aliases = "cos")]
+    public string compileOnSave { get; set; }
+
+    [CommandLineOption(Description = "Rebuild the project whenever a file is saved", MinOccurs = 0, Aliases = "bos")]
+    public string buildOnSave { get; set; }
+
     [CommandLineOption(Description = "Show debug output", MinOccurs = 0, Aliases = "")]
     public bool debug { get; set; }
 

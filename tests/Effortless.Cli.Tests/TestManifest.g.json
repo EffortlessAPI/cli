@@ -176,6 +176,46 @@
     "interactive": false
   },
   {
+    "id": "unit-save-watcher-never-concurrent",
+    "suite": "unit-core",
+    "priority": "P0",
+    "status": "green",
+    "slow": false,
+    "interactive": false
+  },
+  {
+    "id": "unit-save-watcher-coalesces",
+    "suite": "unit-core",
+    "priority": "P0",
+    "status": "green",
+    "slow": false,
+    "interactive": false
+  },
+  {
+    "id": "unit-save-watcher-survives-failure",
+    "suite": "unit-core",
+    "priority": "P0",
+    "status": "green",
+    "slow": false,
+    "interactive": false
+  },
+  {
+    "id": "unit-save-watcher-sequential",
+    "suite": "unit-core",
+    "priority": "P0",
+    "status": "green",
+    "slow": false,
+    "interactive": false
+  },
+  {
+    "id": "unit-save-watcher-missing-file",
+    "suite": "unit-core",
+    "priority": "P0",
+    "status": "green",
+    "slow": false,
+    "interactive": false
+  },
+  {
     "id": "unit-build-error-log",
     "suite": "unit-core",
     "priority": "P0",

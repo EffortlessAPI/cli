@@ -1,5 +1,5 @@
 {
-  "SSoTmeProjectId": "5b49e262-f42b-43f9-817c-bc63c94b1fd0",
+  "SSoTmeProjectId": "443bac0a-4955-4a60-b5bc-01c70311b3d0",
   "Name": "compile-rulebook-test",
   "ProjectSettings": [
     {
@@ -16,10 +16,27 @@
       "IsDisabled": false,
       "LastVersionUsed": "v2026.09.10.1545",
       "LastUrl": "https://effortless-compile-rulebook-v2026-09-10-1545-cmvbd4phczmeg.7pktzg2z971j0.cpln.app"
+    },
+    {
+      "IsSSoTTranspiler": false,
+      "Name": "rulebook-to-rulespeak",
+      "RelativePath": "/rulespeak",
+      "CommandLine": "rulebook-to-rulespeak -i ../effortless-rulebook/effortless-rulebook.json",
+      "IsDisabled": false,
+      "LastVersionUsed": "v2026.09.10.1010",
+      "LastUrl": "https://effortless-rulebook-to-rulespeak-v2026-09-10-1010-cmvbd4phczmeg.7pktzg2z971j0.cpln.app"
+    },
+    {
+      "IsSSoTTranspiler": false,
+      "Name": "effortless-rulebook-editor",
+      "RelativePath": "/effortless-rulebook",
+      "CommandLine": "effortless-rulebook-editor -i ./effortless-rulebook.json",
+      "IsDisabled": false,
+      "LastVersionUsed": "v2026.09.10.1047"
     }
   ],
   "ShowHidden": false,
   "ShowAllFiles": false,
-  "CurrentPath": null,
+  "CurrentPath": "/effortless-rulebook",
   "SSoTmeProjectFiles": null
 }

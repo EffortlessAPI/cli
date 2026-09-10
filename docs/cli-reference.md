@@ -215,6 +215,22 @@ Running registered transpiler steps.
 - Help text: Builds whenever a trigger is invoked (see readme for URL)
 - Description: 
 
+### `-compileOnSave`
+
+- Aliases: `cos`
+- Bareword forms: None
+- Value type: `string`
+- Help text: Recompile one rulebook whenever it is saved
+- Description: 
+
+### `-buildOnSave`
+
+- Aliases: `bos`
+- Bareword forms: None
+- Value type: `string`
+- Help text: Rebuild the project whenever a file is saved
+- Description: 
+
 ### `-includeDisabled`
 
 - Aliases: `id`

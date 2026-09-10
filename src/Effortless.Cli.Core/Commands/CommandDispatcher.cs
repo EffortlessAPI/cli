@@ -761,9 +761,17 @@ public sealed class CommandDispatcher
             return new ServeCommand().Run(invocation);
         }
 
-        if (options.build || options.buildLocal)
+        // The save-watch modes are builds that keep running, so they dispatch
+        // here whether or not an explicit build verb was also given: the flag
+        // itself is the instruction.
+        if (options.build
+            || options.buildLocal
+            || !string.IsNullOrWhiteSpace(options.compileOnSave)
+            || !string.IsNullOrWhiteSpace(options.buildOnSave))
         {
-            _longRunning = !string.IsNullOrWhiteSpace(options.buildOnTrigger);
+            _longRunning = !string.IsNullOrWhiteSpace(options.buildOnTrigger)
+                || !string.IsNullOrWhiteSpace(options.compileOnSave)
+                || !string.IsNullOrWhiteSpace(options.buildOnSave);
             return new BuildCommand(RunCommandLine)
                 .Run(invocation, all: false);
         }
