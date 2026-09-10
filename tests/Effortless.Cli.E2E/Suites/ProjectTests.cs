@@ -10,7 +10,12 @@ public sealed class ProjectTests
     [Fact(DisplayName = "proj-init-empty: init scaffolds a project")]
     public async Task InitScaffoldsAProject()
     {
+        await using var server = new MockToolServer();
+        var index = IndexFixture.Load(server, "init-compile-rulebook");
+        server.IndexJson = index.Json;
+        server.Enqueue("compile-rulebook", ToolBehavior.Files());
         using var sandbox = Sandbox.Create(_cli);
+        sandbox.SeedHome(index);
         var projectPath = CreateDirectory(sandbox.ProjectPath, "demo");
 
         var result = await _cli.Run(["-init"], projectPath, sandbox);
@@ -21,7 +26,11 @@ public sealed class ProjectTests
         Assert.Equal("demo", String(project, "Name"));
         Assert.Single(Array(project, "ProjectSettings"));
         Assert.Equal("demo", SettingValue(project, "project-name"));
-        Assert.Empty(Array(project, "ProjectTranspilers"));
+        var step = Assert.IsType<JsonObject>(Assert.Single(Array(project, "ProjectTranspilers")));
+        Assert.Equal("compile-rulebook", String(step, "Name"));
+        Assert.Equal("/effortless-rulebook", String(step, "RelativePath"));
+        Assert.Equal("compile-rulebook -i effortless-rulebook.json", String(step, "CommandLine"));
+        Assert.False(step["IsDisabled"]?.GetValue<bool>());
         Assert.True(Guid.TryParse(String(project, "SSoTmeProjectId"), out _));
 
         Assert.Equal(StandardGitIgnore, File.ReadAllText(Path.Combine(projectPath, ".gitignore")));
@@ -49,7 +58,12 @@ public sealed class ProjectTests
     [Fact(DisplayName = "proj-init-name: init -name overrides the name")]
     public async Task InitNameOverridesTheDirectoryName()
     {
+        await using var server = new MockToolServer();
+        var index = IndexFixture.Load(server, "init-compile-rulebook");
+        server.IndexJson = index.Json;
+        server.Enqueue("compile-rulebook", ToolBehavior.Files());
         using var sandbox = Sandbox.Create(_cli);
+        sandbox.SeedHome(index);
         var projectPath = CreateDirectory(sandbox.ProjectPath, "not-foo");
 
         var result = await _cli.Run(["-init", "-name", "Foo"], projectPath, sandbox);
@@ -63,7 +77,12 @@ public sealed class ProjectTests
     [Fact(DisplayName = "proj-init-bareword: bareword init scaffolds the same project")]
     public async Task BarewordInitScaffoldsAProject()
     {
+        await using var server = new MockToolServer();
+        var index = IndexFixture.Load(server, "init-compile-rulebook");
+        server.IndexJson = index.Json;
+        server.Enqueue("compile-rulebook", ToolBehavior.Files());
         using var sandbox = Sandbox.Create(_cli);
+        sandbox.SeedHome(index);
         var projectPath = CreateDirectory(sandbox.ProjectPath, "bareword-demo");
 
         var result = await _cli.Run(["init"], projectPath, sandbox);
@@ -72,7 +91,8 @@ public sealed class ProjectTests
         var project = ReadObject(Path.Combine(projectPath, "effortless.json"));
         Assert.Equal("bareword-demo", String(project, "Name"));
         Assert.Equal("bareword-demo", SettingValue(project, "project-name"));
-        Assert.Empty(Array(project, "ProjectTranspilers"));
+        var step = Assert.IsType<JsonObject>(Assert.Single(Array(project, "ProjectTranspilers")));
+        Assert.Equal("compile-rulebook", String(step, "Name"));
         Assert.True(File.Exists(Path.Combine(projectPath, ".gitignore")));
         Assert.True(File.Exists(Path.Combine(projectPath, "effortless.env")));
         Assert.True(
@@ -80,10 +100,15 @@ public sealed class ProjectTests
                 Path.Combine(projectPath, "effortless-rulebook", "effortless-rulebook.json")));
     }
 
-    [Fact(DisplayName = "proj-init-twice: legacy repeated init exits zero silently and canonicalizes JSON")]
+    [Fact(DisplayName = "proj-init-twice: legacy repeated init exits zero and canonicalizes JSON")]
     public async Task InitTwicePinsLegacySilentZeroExitAndJsonCanonicalization()
     {
+        await using var server = new MockToolServer();
+        var index = IndexFixture.Load(server, "init-compile-rulebook");
+        server.IndexJson = index.Json;
+        server.Enqueue("compile-rulebook", ToolBehavior.Files(), ToolBehavior.Files());
         using var sandbox = Sandbox.Create(_cli);
+        sandbox.SeedHome(index);
         var projectPath = CreateDirectory(sandbox.ProjectPath, "twice");
         var first = await _cli.Run(["-init"], projectPath, sandbox);
         Assert.Equal(0, first.ExitCode);
@@ -94,19 +119,24 @@ public sealed class ProjectTests
 
         // The legacy top-level exception handler swallows this failure and exits zero;
         // loading also serializes root CurrentPath from null to an empty string.
+        // Every init implies a build (D-init-implies-build), and the registered
+        // compile-rulebook step now has something real to run on every repeat.
         Assert.Equal(0, second.ExitCode);
-        Assert.Empty(second.Combined);
+        Assert.Contains("compile-rulebook", second.Combined);
         var after = ReadObject(projectFile);
         Assert.True(before.ContainsKey("CurrentPath"));
         Assert.Null(before["CurrentPath"]);
         Assert.Equal(string.Empty, after["CurrentPath"]?.GetValue<string>());
         var beforeProjectName = FindSetting(before, "project-name")!;
         var afterProjectName = FindSetting(after, "project-name")!;
-        Assert.True(Guid.TryParse(String(beforeProjectName, "ProjectSettingId"), out _));
+        // The implied build after init (D-init-implies-build) re-saves the
+        // project once compile-rulebook resolves a version, so the volatile
+        // ProjectSettingId is already canonicalized away on the first init,
+        // not just the second.
+        Assert.False(beforeProjectName.ContainsKey("ProjectSettingId"));
         Assert.False(afterProjectName.ContainsKey("ProjectSettingId"));
         before.Remove("CurrentPath");
         after.Remove("CurrentPath");
-        beforeProjectName.Remove("ProjectSettingId");
         Assert.True(
             JsonNode.DeepEquals(before, after),
             $"Unexpected repeated-init rewrite.{Environment.NewLine}Before: {before}{Environment.NewLine}After: {after}");
@@ -150,7 +180,12 @@ public sealed class ProjectTests
     [Fact(DisplayName = "proj-init-force-subproject: native argv force creates a nested project")]
     public async Task InitForceCreatesNestedProjectWithoutChangingParent()
     {
+        await using var server = new MockToolServer();
+        var index = IndexFixture.Load(server, "init-compile-rulebook");
+        server.IndexJson = index.Json;
+        server.Enqueue("compile-rulebook", ToolBehavior.Files());
         using var sandbox = Sandbox.Create(_cli);
+        sandbox.SeedHome(index);
         sandbox.SeedProject("project-basic");
         var parentPath = Path.Combine(sandbox.ProjectPath, "effortless.json");
         var parentBefore = File.ReadAllBytes(parentPath);
@@ -168,7 +203,12 @@ public sealed class ProjectTests
     [Fact(DisplayName = "proj-init-gitignore-append: init appends effortless.env")]
     public async Task InitAppendsEnvironmentFileToExistingGitIgnore()
     {
+        await using var server = new MockToolServer();
+        var index = IndexFixture.Load(server, "init-compile-rulebook");
+        server.IndexJson = index.Json;
+        server.Enqueue("compile-rulebook", ToolBehavior.Files());
         using var sandbox = Sandbox.Create(_cli);
+        sandbox.SeedHome(index);
         var projectPath = CreateDirectory(sandbox.ProjectPath, "gitignore-demo");
         File.WriteAllText(Path.Combine(projectPath, ".gitignore"), "existing-rule");
 

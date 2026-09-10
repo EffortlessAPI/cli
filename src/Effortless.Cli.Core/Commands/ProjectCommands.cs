@@ -48,6 +48,7 @@ public sealed class ProjectCommands
             RootPath = directory.FullName,
             CurrentPath = null,
         };
+        InstallCompileRulebook(project);
         project.Save(directory);
         WriteGitIgnore(directory);
         WriteEnvironmentTemplate(directory);
@@ -258,6 +259,20 @@ public sealed class ProjectCommands
             + Environment.NewLine);
     }
 
+    // Every fresh project already has one entity to compile, so it also
+    // already gets the transpiler that compiles it: no project should ever
+    // need an explicit -install before its first build produces output.
+    private static void InstallCompileRulebook(EffortlessProject project)
+    {
+        project.ProjectTranspilers.Add(new ProjectTranspiler
+        {
+            Name = "compile-rulebook",
+            RelativePath = "/effortless-rulebook",
+            CommandLine = "compile-rulebook -i effortless-rulebook.json",
+            IsDisabled = false,
+        });
+    }
+
     private static void WriteRulebook(
         DirectoryInfo directory,
         string projectName)
@@ -276,48 +291,33 @@ public sealed class ProjectCommands
         // one raw field, one calculated field, three rows. Every transpiler has
         // something real to render, so the first `effortless build` produces
         // output instead of an error about an empty rulebook.
-        var root = new JObject
-        {
-            ["Name"] = projectName,
-            ["Description"] =
-                "A starter rulebook. Replace the HelloWho entity with your own.",
-            ["HelloWho"] = new JObject
+        //
+        // effortless-rulebook.json uses "Single Line Leaves": pretty-printed
+        // and nested, but every leaf object (a schema field, a data row) stays
+        // on one line so the file stays greppable/diffable. JObject.ToString
+        // can't produce that, so this is built as text rather than through the
+        // normal JObject serializer.
+        var nameJson = JsonConvert.ToString(projectName);
+        var nameLiteral = nameJson.Substring(1, nameJson.Length - 2);
+        var contents =
+            """
             {
-                ["Description"] =
-                    "The smallest complete rulebook: a fact, and a rule that "
-                    + "derives a result from it.",
-                ["schema"] = new JArray
-                {
-                    new JObject
-                    {
-                        ["name"] = "Who",
-                        ["datatype"] = "string",
-                        ["type"] = "raw",
-                        ["nullable"] = false,
-                        ["Description"] = "Who is being greeted.",
-                    },
-                    new JObject
-                    {
-                        ["name"] = "Result",
-                        ["datatype"] = "string",
-                        ["type"] = "calculated",
-                        ["nullable"] = false,
-                        ["Description"] =
-                            "The greeting, derived from Who. Never typed by "
-                            + "hand.",
-                        ["formula"] = "=\"Hello \" & {{Who}} & \"!\"",
-                    },
-                },
-                ["data"] = new JArray
-                {
-                    new JObject { ["Who"] = "world" },
-                    new JObject { ["Who"] = "bob" },
-                    new JObject { ["Who"] = "everyone" },
-                },
-            },
-        };
-        File.WriteAllText(
-            path,
-            root.ToString(Formatting.Indented) + Environment.NewLine);
+              "Name": "__NAME__",
+              "Description": "A starter rulebook. Replace the HelloWho entity with your own.",
+              "HelloWho": {
+                "Description": "The smallest complete rulebook: a fact, and a rule that derives a result from it.",
+                "schema": [
+                  { "name": "Who", "datatype": "string", "type": "raw", "nullable": false, "Description": "Who is being greeted." },
+                  { "name": "Result", "datatype": "string", "type": "calculated", "nullable": false, "Description": "The greeting, derived from Who. Never typed by hand.", "formula": "=\"Hello \" & {{Who}} & \"!\"" }
+                ],
+                "data": [
+                  { "Who": "world" },
+                  { "Who": "bob" },
+                  { "Who": "everyone" }
+                ]
+              }
+            }
+            """.Replace("__NAME__", nameLiteral);
+        File.WriteAllText(path, contents + Environment.NewLine);
     }
 }

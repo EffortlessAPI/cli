@@ -1,0 +1,25 @@
+{
+  "SSoTmeProjectId": "5b49e262-f42b-43f9-817c-bc63c94b1fd0",
+  "Name": "compile-rulebook-test",
+  "ProjectSettings": [
+    {
+      "Name": "project-name",
+      "Value": "compile-rulebook-test"
+    }
+  ],
+  "ProjectTranspilers": [
+    {
+      "IsSSoTTranspiler": false,
+      "Name": "compile-rulebook",
+      "RelativePath": "/effortless-rulebook",
+      "CommandLine": "compile-rulebook -i effortless-rulebook.json",
+      "IsDisabled": false,
+      "LastVersionUsed": "v2026.09.10.1545",
+      "LastUrl": "https://effortless-compile-rulebook-v2026-09-10-1545-cmvbd4phczmeg.7pktzg2z971j0.cpln.app"
+    }
+  ],
+  "ShowHidden": false,
+  "ShowAllFiles": false,
+  "CurrentPath": null,
+  "SSoTmeProjectFiles": null
+}

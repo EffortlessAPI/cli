@@ -21,6 +21,24 @@ public static class FileSetWriter
 
     public static void SplitFileSetXml(this string fileSetXml, bool overwriteAll, string basePath)
     {
+        fileSetXml.SplitFileSetXml(overwriteAll, basePath, null);
+    }
+
+    /// <summary>
+    /// <paramref name="forceOverwritePaths"/> is the set of resolved full paths that must
+    /// be written even though their FileSet entry says OverwriteMode=Never. It carries the
+    /// in-place-upsert case (see <c>ZfsLedger.DowngradeInPlaceUpserts</c>): those entries
+    /// were deliberately downgraded to Never so that nothing downstream ever treats the
+    /// user's own file as generated, but the upsert the tool just computed still has to
+    /// land on disk. This is a set of paths supplied by the caller for this one call, not
+    /// a rule about any tool, shape, or path baked into the writer.
+    /// </summary>
+    public static void SplitFileSetXml(
+        this string fileSetXml,
+        bool overwriteAll,
+        string basePath,
+        HashSet<string> forceOverwritePaths)
+    {
         if (string.IsNullOrEmpty(fileSetXml) || !fileSetXml.Contains("<"))
         {
             return;
@@ -78,7 +96,14 @@ public static class FileSetWriter
                         foreach (XmlElement fileName in elem.SelectNodes("RelativePath"))
                         {
                             string xmlFilePath = Path.Combine(basePath, "test.xml");
-                            ProcessFileSetFile(xmlFilePath, overwriteAll, elem, contents, fileName, basePath);
+                            ProcessFileSetFile(
+                                xmlFilePath,
+                                overwriteAll,
+                                elem,
+                                contents,
+                                fileName,
+                                basePath,
+                                forceOverwritePaths);
                         }
                     }
                     else if (!ReferenceEquals(binaryContentsNode, null) ||
@@ -113,7 +138,9 @@ public static class FileSetWriter
                                 fileInfo.Directory.Create();
                             }
 
-                            if (!fileInfo.Exists || !neverOverwrite)
+                            if (!fileInfo.Exists ||
+                                !neverOverwrite ||
+                                IsForced(forceOverwritePaths, fileInfo.FullName))
                             {
                                 if (!ReferenceEquals(zippedBinaryContentsNode, null))
                                 {
@@ -172,13 +199,20 @@ public static class FileSetWriter
         }
     }
 
+    private static bool IsForced(HashSet<string> forceOverwritePaths, string fullPath)
+    {
+        return forceOverwritePaths is not null &&
+               forceOverwritePaths.Contains(fullPath);
+    }
+
     private static void ProcessFileSetFile(
         string relativePathOfXml,
         bool overwriteAll,
         XmlElement elem,
         string contents,
         XmlElement fileName,
-        string basePath)
+        string basePath,
+        HashSet<string> forceOverwritePaths = null)
     {
         string relativeFileName = fileName.InnerText;
         relativeFileName = FullFromRelative(
@@ -221,6 +255,11 @@ public static class FileSetWriter
             writeFile = false;
         }
 
+        if (IsForced(forceOverwritePaths, relativeFileName))
+        {
+            writeFile = true;
+        }
+
         while (contents.Contains("[$$NEWUUID$$]"))
         {
             contents = string.Format(
@@ -246,6 +285,14 @@ public static class FileSetWriter
 
     public static void SplitFileSetFile(this string fileSetFileName, string basePath)
     {
+        fileSetFileName.SplitFileSetFile(basePath, null);
+    }
+
+    public static void SplitFileSetFile(
+        this string fileSetFileName,
+        string basePath,
+        HashSet<string> forceOverwritePaths)
+    {
         const int maxRetries = 5;
         const int retryDelayMs = 100;
         int retryCount = 0;
@@ -263,7 +310,7 @@ public static class FileSetWriter
                 using (var streamReader = new StreamReader(fileStream, Encoding.UTF8))
                 {
                     string fileContents = streamReader.ReadToEnd();
-                    SplitFileSetXml(fileContents, false, basePath);
+                    SplitFileSetXml(fileContents, false, basePath, forceOverwritePaths);
                     return;
                 }
             }

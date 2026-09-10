@@ -260,4 +260,186 @@ public sealed class FileSetTests
         ZfsLedger.ValidateSelfSourceOverwrites(project, inputXml, neverModeOutputXml, directory.Path);
         ZfsLedger.ValidateSelfSourceOverwrites(project, inputXml, unrelatedOutputXml, directory.Path);
     }
+
+    [Fact(DisplayName = "unit-in-place-upsert-downgrade: an Always output at the input's own path becomes Never so it is never ledgered as generated")]
+    public void DowngradeInPlaceUpsertsRewritesAlwaysToNeverAtTheInputPath()
+    {
+        using var directory = new TestDirectory();
+        var project = new EffortlessProject { RootPath = directory.Path };
+        var extractToDir = Path.Combine(directory.Path, "effortless-rulebook");
+        Directory.CreateDirectory(extractToDir);
+
+        // The tool was handed effortless-rulebook/effortless-rulebook.json and returned
+        // the same file, at the same place, declaring Always: the in-place upsert shape.
+        var inputXml = FileSetXml.ToXml(
+            new FileSet
+            {
+                FileSetFiles = new BindingList<FileSetFile>
+                {
+                    new()
+                    {
+                        RelativePath = "effortless-rulebook.json",
+                        OriginalRelativePath = "effortless-rulebook/effortless-rulebook.json",
+                        ZippedFileContents = GZip.Zip("original"),
+                    },
+                },
+            });
+        var outputXml = FileSetXml.ToXml(
+            new FileSet
+            {
+                FileSetFiles = new BindingList<FileSetFile>
+                {
+                    new()
+                    {
+                        RelativePath = "effortless-rulebook.json",
+                        FileContents = "upserted",
+                        OverwriteMode = "Always",
+                    },
+                },
+            });
+
+        var downgraded = ZfsLedger.DowngradeInPlaceUpserts(
+            project,
+            inputXml,
+            outputXml,
+            extractToDir,
+            out var upsertPaths);
+
+        var expectedPath = new FileInfo(
+            Path.Combine(extractToDir, "effortless-rulebook.json")).FullName;
+        Assert.Contains(expectedPath, upsertPaths);
+
+        var rewritten = FileSetXml.ToFileSet(downgraded).FileSetFiles.Single();
+        Assert.Equal("Never", rewritten.OverwriteMode);
+        Assert.False(rewritten.AlwaysOverwrite);
+
+        // The whole point of the downgrade: the clean pass must now refuse to delete the
+        // user's hand-edited file, which is what deleted the rulebook before this rule.
+        File.WriteAllText(Path.Combine(extractToDir, "effortless-rulebook.json"), "hand edited");
+        var original = Environment.CurrentDirectory;
+        try
+        {
+            Environment.CurrentDirectory = extractToDir;
+            FileSetCleaner.CleanFileSet(downgraded, debug: false, deleteEmptyDirs: false);
+        }
+        finally
+        {
+            Environment.CurrentDirectory = original;
+        }
+
+        Assert.Equal(
+            "hand edited",
+            File.ReadAllText(Path.Combine(extractToDir, "effortless-rulebook.json")));
+    }
+
+    [Fact(DisplayName = "unit-in-place-upsert-downgrade: a normal generated output keeps Always and is left fully alone")]
+    public void DowngradeInPlaceUpsertsLeavesOrdinaryGeneratedOutputsUntouched()
+    {
+        using var directory = new TestDirectory();
+        var project = new EffortlessProject { RootPath = directory.Path };
+
+        // rulebook-to-rulespeak's shape: reads the rulebook, writes different files.
+        var inputXml = FileSetXml.ToXml(
+            new FileSet
+            {
+                FileSetFiles = new BindingList<FileSetFile>
+                {
+                    new()
+                    {
+                        RelativePath = "effortless-rulebook.json",
+                        OriginalRelativePath = "effortless-rulebook/effortless-rulebook.json",
+                        ZippedFileContents = GZip.Zip("original"),
+                    },
+                },
+            });
+        var outputXml = FileSetXml.ToXml(
+            new FileSet
+            {
+                FileSetFiles = new BindingList<FileSetFile>
+                {
+                    new() { RelativePath = "rulespeak.md", FileContents = "docs", AlwaysOverwrite = true },
+                },
+            });
+
+        var result = ZfsLedger.DowngradeInPlaceUpserts(
+            project,
+            inputXml,
+            outputXml,
+            Path.Combine(directory.Path, "rulespeak"),
+            out var upsertPaths);
+
+        Assert.Empty(upsertPaths);
+        Assert.Same(outputXml, result);
+        Assert.True(FileSetXml.ToFileSet(result).FileSetFiles.Single().AlwaysOverwrite);
+    }
+
+    [Fact(DisplayName = "unit-in-place-upsert-write: a downgraded entry is still written over the existing file")]
+    public void ForcedPathsAreWrittenEvenThoughTheEntrySaysNever()
+    {
+        using var directory = new TestDirectory();
+        var target = directory.File("effortless-rulebook.json");
+        File.WriteAllText(target, "hand edited");
+
+        // After the downgrade the entry says Never, which would normally skip an existing
+        // file; the upsert still has to land, so the resolved path is forced.
+        var xml = FileSetXml.ToXml(
+            new FileSet
+            {
+                FileSetFiles = new BindingList<FileSetFile>
+                {
+                    new()
+                    {
+                        RelativePath = "effortless-rulebook.json",
+                        FileContents = "upserted",
+                        OverwriteMode = "Never",
+                    },
+                },
+            });
+
+        var forced = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            new FileInfo(target).FullName,
+        };
+
+        xml.SplitFileSetXml(false, directory.Path, forced);
+        Assert.Equal("upserted", File.ReadAllText(target));
+
+        // Without the force set the Never entry must still be respected.
+        File.WriteAllText(target, "hand edited again");
+        xml.SplitFileSetXml(false, directory.Path, null);
+        Assert.Equal("hand edited again", File.ReadAllText(target));
+    }
+
+    [Fact(DisplayName = "unit-in-place-upsert-ledger-prune: a ledger poisoned before this rule drops the entry and self-heals")]
+    public void PruneLedgerEntriesRemovesPreviouslyPoisonedRows()
+    {
+        using var directory = new TestDirectory();
+
+        // What an older build wrote: the user's own rulebook recorded as a generated
+        // Always file, alongside a genuinely generated one that must survive the prune.
+        var poisoned = FileSetXml.ToXml(
+            new FileSet
+            {
+                FileSetFiles = new BindingList<FileSetFile>
+                {
+                    new()
+                    {
+                        RelativePath = "effortless-rulebook.json",
+                        FileContents = "generated",
+                        AlwaysOverwrite = true,
+                    },
+                    new() { RelativePath = "rulespeak.md", FileContents = "docs", AlwaysOverwrite = true },
+                },
+            });
+
+        var prune = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            new FileInfo(directory.File("effortless-rulebook.json")).FullName,
+        };
+
+        var pruned = ZfsLedger.PruneLedgerEntries(poisoned, prune, directory.Path);
+        var remaining = FileSetXml.ToFileSet(pruned).FileSetFiles;
+
+        Assert.Equal("rulespeak.md", Assert.Single(remaining).RelativePath);
+    }
 }

@@ -114,7 +114,7 @@ public static class CliOptionMetadata
                     "",
                     "init",
                     "Create effortless.json and a starter rulebook here",
-                    "Initializes the current folder as an Effortless project root. Writes effortless.json and a starter effortless-rulebook/effortless-rulebook.json containing one HelloWho entity with a raw Who field, a calculated Result field (\"Hello \" & Who & \"!\"), and three rows, so the project builds and produces real output before you have written any rules of your own. Pass `force` as the next argument to create a nested sub-project instead of failing when a parent project already exists.",
+                    "Initializes the current folder as an Effortless project root. Writes effortless.json and a starter effortless-rulebook/effortless-rulebook.json containing one HelloWho entity with a raw Who field, a calculated Result field (\"Hello \" & Who & \"!\"), and three rows, and registers the compile-rulebook transpiler against it, so the project builds and produces real output before you have written any rules of your own. Pass `force` as the next argument to create a nested sub-project instead of failing when a parent project already exists.",
                     "effortless -init"),
                 new(
                     "install",

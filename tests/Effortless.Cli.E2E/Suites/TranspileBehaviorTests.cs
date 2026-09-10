@@ -277,13 +277,16 @@ public sealed class TranspileBehaviorTests
         server.ThrowIfFaulted();
     }
 
-    [Fact(DisplayName = "tx-zfs-self-source: legacy remote responses retain self-source entries and later clean deletes them")]
-    public async Task RemoteResponseRetainsSelfSourceEntryAndLaterCleanDeletesIt()
+    [Fact(DisplayName = "tx-zfs-self-source: an in-place upsert is downgraded to Never and survives, while a real output still cleans")]
+    public async Task InPlaceUpsertSurvivesWhileGeneratedOutputStillCleans()
     {
         var cli = new CliUnderTest();
         await using var server = new MockToolServer();
         using var sandbox = CreateSandbox(cli, server);
         sandbox.WriteFile("in.txt", "original");
+
+        // in.txt comes back at the path it was read from, declared Always: the in-place
+        // upsert shape. out.txt is an ordinary generated file and must be unaffected.
         server.Enqueue(
             "echo",
             ToolBehavior.Files(
@@ -297,11 +300,28 @@ public sealed class TranspileBehaviorTests
             sandbox);
 
         AssertSuccess(first);
+
+        // The upsert still lands on disk even though it is recorded as Never.
+        Assert.Equal("rewritten", File.ReadAllText(Path.Combine(sandbox.ProjectPath, "in.txt")));
+
         var ledgerPath = LedgerPath(sandbox, server, "echo");
         var firstLedger = ParseLedger(ledgerPath);
         Assert.Equal(
             ["in.txt", "out.txt"],
             firstLedger.Select(entry => entry.RelativePath).ToArray());
+
+        // The whole fix: the input's own path is ledgered as Never, so nothing downstream
+        // believes the CLI generated it; the real output keeps Always.
+        var upsertEntry = firstLedger.Single(entry => entry.RelativePath == "in.txt");
+        Assert.Equal("Never", upsertEntry.OverwriteMode);
+        Assert.NotEqual(true, upsertEntry.AlwaysOverwrite);
+
+        var generatedEntry = firstLedger.Single(entry => entry.RelativePath == "out.txt");
+        Assert.Equal(true, generatedEntry.AlwaysOverwrite);
+
+        // A hand-edit is the normal workflow for a file the user owns; it must not make
+        // the next run delete it.
+        sandbox.WriteFile("in.txt", "hand edited");
 
         var second = await cli.Run(
             ["echo", "-i", "in.txt"],
@@ -309,7 +329,7 @@ public sealed class TranspileBehaviorTests
             sandbox);
 
         AssertSuccess(second);
-        Assert.False(File.Exists(Path.Combine(sandbox.ProjectPath, "in.txt")));
+        Assert.Equal("hand edited", File.ReadAllText(Path.Combine(sandbox.ProjectPath, "in.txt")));
         Assert.False(File.Exists(Path.Combine(sandbox.ProjectPath, "out.txt")));
         Assert.Empty(ParseLedger(ledgerPath));
         Assert.Equal(2, server.Requests.Count);

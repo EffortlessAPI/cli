@@ -1,0 +1,17 @@
+{
+  "transpilerVersions": {
+    "effortless/rulebook/compile-rulebook": {
+      "v2026.01.01.0001": {
+        "metaData": {
+          "isHeadVersion": true
+        },
+        "urls": {
+          "post": "http://127.0.0.1:{port}/tools/compile-rulebook/v2026.01.01.0001/"
+        }
+      }
+    }
+  },
+  "cliUpdateAvailable": false,
+  "latestBridgeVersion": null,
+  "latestCliVersion": "2026-06-09.06.13"
+}

@@ -61,7 +61,7 @@ Creating, describing and configuring the effortless.json project.
 - Bareword forms: `init`
 - Value type: `bool`
 - Help text: Initialize the current folder as the root of an Effortless project. An Optional parameter of force will create a sub-project.
-- Description: Create effortless.json, .gitignore, effortless.env and a starter rulebook in cwd.
+- Description: Create effortless.json, .gitignore, effortless.env, a starter rulebook, and register compile-rulebook against it, in cwd.
 
 ### `-describe`
 

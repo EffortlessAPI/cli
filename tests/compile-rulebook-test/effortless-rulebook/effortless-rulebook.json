@@ -1,0 +1,17 @@
+{
+  "Name": "compile-rulebook-test",
+  "Description": "A starter rulebook. Replace the HelloWho entity with your own.",
+  "HelloWho": {
+    "Description": "The smallest complete rulebook: a fact, and a rule that derives a result from it.",
+    "schema": [
+      { "name": "Who", "datatype": "string", "type": "raw", "nullable": false, "Description": "Who is being greeted." },
+      { "name": "Result", "datatype": "string", "type": "calculated", "nullable": false, "Description": "The greeting, derived from Who. Never typed by hand.", "formula": "=\"Hello \" & {{Who}} & \"!\"" }
+    ],
+    "data": [
+      { "Who": "world", "Result": "Hello world!" },
+      { "Who": "bob", "Result": "Hello bob!" },
+      { "Who": "mary", "Result": "Hello mary!" },
+      { "Who": "everyone", "Result": "Hello everyone!" }
+    ]
+  }
+}
