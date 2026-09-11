@@ -287,11 +287,16 @@ public sealed class ProjectCommands
             return;
         }
 
-        // A new project starts with a rulebook that already builds: a HelloWhos
-        // entity (two raw fields, one calculated field, three rows) and a Venues
-        // entity that relates to it and looks up its Introduction. Every transpiler has
+        // A new project starts with a rulebook that already builds: ONE entity,
+        // two raw fields, one calculated field, three rows. Every transpiler has
         // something real to render, so the first `effortless build` produces
         // output instead of an error about an empty rulebook.
+        //
+        // Deliberately one entity and one rule. A starter rulebook is the first
+        // thing a new user reads, so it teaches the smallest complete idea: a
+        // fact you type, and a value derived from it. Anything more (a second
+        // entity, a relationship, a cross-table lookup) is demo content rather
+        // than a starting point, and belongs in an example project, not here.
         //
         // effortless-rulebook.json uses "Single Line Leaves": pretty-printed
         // and nested, but every leaf object (a schema field, a data row) stays
@@ -316,19 +321,6 @@ public sealed class ProjectCommands
                   { "HelloWhoId": "world", "Name": "World" },
                   { "HelloWhoId": "bob", "Name": "Bob" },
                   { "HelloWhoId": "everyone", "Name": "Everyone" }
-                ]
-              },
-              "Venues": {
-                "Description": "A venue aimed at one HelloWho audience, showing that audience's introduction.",
-                "schema": [
-                  { "name": "VenueId", "datatype": "string", "type": "raw", "nullable": false, "Description": "Stored identity of the row." },
-                  { "name": "Name", "datatype": "string", "type": "raw", "nullable": false, "Description": "The venue's display name." },
-                  { "name": "TargetAudience", "datatype": "string", "type": "relationship", "nullable": false, "RelatedTo": "HelloWhos", "Description": "The HelloWho this venue is aimed at." },
-                  { "name": "AudienceIntroduction", "datatype": "string", "type": "lookup", "nullable": true, "formula": "=INDEX(HelloWhos!{{Introduction}}, MATCH({{TargetAudience}}, HelloWhos!{{HelloWhoId}}, 0))", "Description": "The target audience's introduction, looked up through TargetAudience." }
-                ],
-                "data": [
-                  { "VenueId": "main-stage", "Name": "Main Stage", "TargetAudience": "everyone" },
-                  { "VenueId": "bobs-bar", "Name": "Bob's Bar", "TargetAudience": "bob" }
                 ]
               }
             }

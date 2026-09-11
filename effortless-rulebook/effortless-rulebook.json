@@ -516,7 +516,7 @@
         "Tier": "primary",
         "Rationale": "The first command any new project runs; creates the effortless.json/rulebook scaffold a build needs to exist at all.",
         "HelpSummary": "Create effortless.json and a starter rulebook here",
-        "HelpDetail": "Initializes the current folder as an Effortless project root. Writes effortless.json and a starter effortless-rulebook/effortless-rulebook.json containing a HelloWhos entity (raw HelloWhoId and Name fields, a calculated Introduction field (\"Hello \" & Name & \"!\"), three rows) and a Venues entity whose TargetAudience relationship points at a HelloWhos row and whose AudienceIntroduction lookup shows that audience's Introduction, and registers the compile-rulebook transpiler against it, so the project builds and produces real output before you have written any rules of your own. Pass `force` as the next argument to create a nested sub-project instead of failing when a parent project already exists.",
+        "HelpDetail": "Initializes the current folder as an Effortless project root. Writes effortless.json and a starter effortless-rulebook/effortless-rulebook.json containing one HelloWhos entity (raw HelloWhoId and Name fields, a calculated Introduction field (\"Hello \" & Name & \"!\"), three rows), and registers the compile-rulebook transpiler against it, so the project builds and produces real output before you have written any rules of your own. Pass `force` as the next argument to create a nested sub-project instead of failing when a parent project already exists.",
         "Example": "effortless -init"
       },
       {

@@ -56,17 +56,12 @@ public sealed class ProjectTests
             schema[2]!["formula"]!.GetValue<string>());
         Assert.Equal(3, hello["data"]!.AsArray().Count);
 
-        var venues = rulebook["Venues"]!.AsObject();
-        var venueSchema = venues["schema"]!.AsArray();
-        Assert.Equal("TargetAudience", venueSchema[2]!["name"]!.GetValue<string>());
-        Assert.Equal("relationship", venueSchema[2]!["type"]!.GetValue<string>());
-        Assert.Equal("HelloWhos", venueSchema[2]!["RelatedTo"]!.GetValue<string>());
-        Assert.Equal("AudienceIntroduction", venueSchema[3]!["name"]!.GetValue<string>());
-        Assert.Equal("lookup", venueSchema[3]!["type"]!.GetValue<string>());
+        // The starter rulebook is deliberately ONE entity: a fact you type and
+        // a value derived from it. A second entity with a relationship and a
+        // cross-table lookup is demo content, not a starting point.
         Assert.Equal(
-            "=INDEX(HelloWhos!{{Introduction}}, MATCH({{TargetAudience}}, HelloWhos!{{HelloWhoId}}, 0))",
-            venueSchema[3]!["formula"]!.GetValue<string>());
-        Assert.Equal(2, venues["data"]!.AsArray().Count);
+            new[] { "Name", "Description", "HelloWhos" },
+            rulebook.Select(pair => pair.Key).ToArray());
     }
 
     [Fact(DisplayName = "proj-init-name: init -name overrides the name")]
