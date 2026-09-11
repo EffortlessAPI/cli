@@ -7,7 +7,7 @@
     <Nullable>disable</Nullable>
     <AssemblyName>Effortless.Cli</AssemblyName>
     <RootNamespace>Effortless.Cli</RootNamespace>
-    <Version>2026.9.11.803</Version>
+    <Version>2026.9.11.1616</Version>
   </PropertyGroup>
 
   <ItemGroup>
