@@ -84,10 +84,27 @@ public sealed class BuildCommand
         bool compileOnly)
     {
         var project = invocation.Project!;
+
+        // A relative path means what it means in the shell: relative to where
+        // the user actually is. Running `-compileOnSave effortless-rulebook.json`
+        // from inside effortless-rulebook/ must watch the file right there, so
+        // the current directory is tried first. The project root is only a
+        // fallback, which keeps the from-the-root form
+        // (`-compileOnSave effortless-rulebook/effortless-rulebook.json`)
+        // working no matter which folder the CLI was invoked from.
         var fileInfo = new FileInfo(
             Path.IsPathRooted(fileToWatch)
                 ? fileToWatch
-                : Path.Combine(project.RootPath, fileToWatch));
+                : Path.Combine(Environment.CurrentDirectory, fileToWatch));
+        if (!fileInfo.Exists && !Path.IsPathRooted(fileToWatch))
+        {
+            var fromProjectRoot = new FileInfo(
+                Path.Combine(project.RootPath, fileToWatch));
+            if (fromProjectRoot.Exists)
+            {
+                fileInfo = fromProjectRoot;
+            }
+        }
 
         if (!fileInfo.Exists)
         {

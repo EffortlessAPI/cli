@@ -287,8 +287,9 @@ public sealed class ProjectCommands
             return;
         }
 
-        // A new project starts with a rulebook that already builds: one entity,
-        // one raw field, one calculated field, three rows. Every transpiler has
+        // A new project starts with a rulebook that already builds: a HelloWhos
+        // entity (two raw fields, one calculated field, three rows) and a Venues
+        // entity that relates to it and looks up its Introduction. Every transpiler has
         // something real to render, so the first `effortless build` produces
         // output instead of an error about an empty rulebook.
         //
@@ -303,17 +304,31 @@ public sealed class ProjectCommands
             """
             {
               "Name": "__NAME__",
-              "Description": "A starter rulebook. Replace the HelloWho entity with your own.",
-              "HelloWho": {
-                "Description": "The smallest complete rulebook: a fact, and a rule that derives a result from it.",
+              "Description": "A starter rulebook. Replace the HelloWhos entity with your own.",
+              "HelloWhos": {
+                "Description": "The smallest complete rulebook: an id, a display name, and a rule that derives a greeting from it.",
                 "schema": [
-                  { "name": "Who", "datatype": "string", "type": "raw", "nullable": false, "Description": "Who is being greeted." },
-                  { "name": "Result", "datatype": "string", "type": "calculated", "nullable": false, "Description": "The greeting, derived from Who. Never typed by hand.", "formula": "=\"Hello \" & {{Who}} & \"!\"" }
+                  { "name": "HelloWhoId", "datatype": "string", "type": "raw", "nullable": false, "Description": "Stored identity of the row." },
+                  { "name": "Name", "datatype": "string", "type": "raw", "nullable": false, "Description": "Who is being greeted." },
+                  { "name": "Introduction", "datatype": "string", "type": "calculated", "nullable": false, "formula": "=\"Hello \" & {{Name}} & \"!\"", "Description": "The greeting, derived from Name. Never typed by hand." }
                 ],
                 "data": [
-                  { "Who": "world" },
-                  { "Who": "bob" },
-                  { "Who": "everyone" }
+                  { "HelloWhoId": "world", "Name": "World" },
+                  { "HelloWhoId": "bob", "Name": "Bob" },
+                  { "HelloWhoId": "everyone", "Name": "Everyone" }
+                ]
+              },
+              "Venues": {
+                "Description": "A venue aimed at one HelloWho audience, showing that audience's introduction.",
+                "schema": [
+                  { "name": "VenueId", "datatype": "string", "type": "raw", "nullable": false, "Description": "Stored identity of the row." },
+                  { "name": "Name", "datatype": "string", "type": "raw", "nullable": false, "Description": "The venue's display name." },
+                  { "name": "TargetAudience", "datatype": "string", "type": "relationship", "nullable": false, "RelatedTo": "HelloWhos", "Description": "The HelloWho this venue is aimed at." },
+                  { "name": "AudienceIntroduction", "datatype": "string", "type": "lookup", "nullable": true, "formula": "=INDEX(HelloWhos!{{Introduction}}, MATCH({{TargetAudience}}, HelloWhos!{{HelloWhoId}}, 0))", "Description": "The target audience's introduction, looked up through TargetAudience." }
+                ],
+                "data": [
+                  { "VenueId": "main-stage", "Name": "Main Stage", "TargetAudience": "everyone" },
+                  { "VenueId": "bobs-bar", "Name": "Bob's Bar", "TargetAudience": "bob" }
                 ]
               }
             }

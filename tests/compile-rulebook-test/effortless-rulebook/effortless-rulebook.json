@@ -1,17 +1,18 @@
 {
   "Name": "compile-rulebook-test",
-  "Description": "A starter rulebook. Replace the HelloWho entity with your own.",
-  "HelloWho": {
-    "Description": "The smallest complete rulebook: a fact, and a rule that derives a result from it.",
+  "Description": "A starter rulebook. Replace the HelloWhos entity with your own.",
+  "HelloWhos": {
+    "Description": "The smallest complete rulebook: an id, a display name, and a rule that derives a greeting from it.",
     "schema": [
+      { "name": "HelloWhoId", "datatype": "string", "type": "raw", "nullable": false, "Description": "Stored identity of the row." },
       { "name": "Who", "datatype": "string", "type": "raw", "nullable": false, "Description": "Who is being greeted." },
-      { "name": "Result", "datatype": "string", "type": "calculated", "nullable": false, "Description": "The greeting, derived from Who. Never typed by hand.", "formula": "=\"Hello \" & {{Who}} & \"!\"" }
+      { "name": "Introduction", "datatype": "string", "type": "calculated", "nullable": false, 
+              "formula": "=\"Hello \" & {{Who}} & \"!\"", "Description": "The greeting, derived from Name. Never typed by hand." }
     ],
     "data": [
-      { "Who": "world", "Result": "Hello world!" },
-      { "Who": "bob", "Result": "Hello bob!" },
-      { "Who": "mary", "Result": "Hello mary!" },
-      { "Who": "everyone", "Result": "Hello everyone!" }
+      { "HelloWhoId": "world", "Who": "World", "Introduction": "Hello World!" },
+      { "HelloWhoId": "bob", "Who": "Bobby", "Introduction": "Hello Bobby!" },
+      { "HelloWhoId": "everyone", "Who": "Everyone", "Introduction": "Hello Everyone!" }
     ]
   }
 }
