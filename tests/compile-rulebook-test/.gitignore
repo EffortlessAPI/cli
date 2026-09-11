@@ -1,9 +1,0 @@
-/**/obj/**/*
-/**/bin/**/*
-/**/.effortless/**/*
-/**/.ssotme/**/*
-/**/.vs/**/*
-/**/node_modules/**/*
-/**/.vscode/**/*
-ssotme.env
-effortless.env
