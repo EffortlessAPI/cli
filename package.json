@@ -1,6 +1,6 @@
 {
   "name": "@effortlessapi/cli",
-  "version": "2026.910.2231",
+  "version": "2026.911.803",
   "dotnet": "8.0.410",
   "description": "REST-only command-line client for EffortlessAPI transpilers",
   "bin": {
