@@ -49,8 +49,11 @@ public class CliOptions
     [CommandLineOption(Description = "Recompile one rulebook whenever it is saved", MinOccurs = 0, Aliases = "cos")]
     public string compileOnSave { get; set; }
 
-    [CommandLineOption(Description = "Rebuild the project whenever a file is saved", MinOccurs = 0, Aliases = "bos")]
+    [CommandLineOption(Description = "Build from this folder whenever a file is saved", MinOccurs = 0, Aliases = "bos")]
     public string buildOnSave { get; set; }
+
+    [CommandLineOption(Description = "Rebuild the whole project whenever a file is saved", MinOccurs = 0, Aliases = "")]
+    public string rebuildAllOnSave { get; set; }
 
     [CommandLineOption(Description = "Show debug output", MinOccurs = 0, Aliases = "")]
     public bool debug { get; set; }

@@ -760,11 +760,13 @@ public sealed class CommandDispatcher
         if (options.build
             || options.buildLocal
             || !string.IsNullOrWhiteSpace(options.compileOnSave)
-            || !string.IsNullOrWhiteSpace(options.buildOnSave))
+            || !string.IsNullOrWhiteSpace(options.buildOnSave)
+            || !string.IsNullOrWhiteSpace(options.rebuildAllOnSave))
         {
             _longRunning = !string.IsNullOrWhiteSpace(options.buildOnTrigger)
                 || !string.IsNullOrWhiteSpace(options.compileOnSave)
-                || !string.IsNullOrWhiteSpace(options.buildOnSave);
+                || !string.IsNullOrWhiteSpace(options.buildOnSave)
+                || !string.IsNullOrWhiteSpace(options.rebuildAllOnSave);
             return new BuildCommand(RunCommandLine)
                 .Run(invocation, all: false);
         }

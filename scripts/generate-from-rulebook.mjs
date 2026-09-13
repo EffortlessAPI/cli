@@ -334,6 +334,7 @@ function generateBarewordVerbs(options) {
     "pin",
     "compileOnSave",
     "buildOnSave",
+    "rebuildAllOnSave",
   ]);
 
   for (const option of options) {

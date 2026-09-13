@@ -184,7 +184,7 @@ public class CliArgumentParserTests
 
         Assert.False(invocation.HasErrors, invocation.ErrorText);
         Assert.Equal(
-            CliArgumentParser.DefaultWatchedFile,
+            CliArgumentParser.FindRulebookToWatch,
             invocation.Options.compileOnSave);
     }
 
@@ -199,8 +199,34 @@ public class CliArgumentParserTests
 
         Assert.False(invocation.HasErrors, invocation.ErrorText);
         Assert.Equal(
-            CliArgumentParser.DefaultWatchedFile,
+            CliArgumentParser.FindRulebookToWatch,
             invocation.Options.buildOnSave);
+    }
+
+    [Theory(DisplayName = "unit-rebuildall-onsave-parse: rebuildAllOnSave shares the default")]
+    [InlineData("-rebuildAllOnSave")]
+    [InlineData("rebuildAllOnSave")]
+    public void RebuildAllOnSaveWithoutAFileWatchesTheProjectRulebook(string form)
+    {
+        var invocation = new CliArgumentParser().Parse(new[] { form });
+
+        Assert.False(invocation.HasErrors, invocation.ErrorText);
+        Assert.Equal(
+            CliArgumentParser.FindRulebookToWatch,
+            invocation.Options.rebuildAllOnSave);
+        Assert.False(invocation.Options.buildAll);
+    }
+
+    [Theory(DisplayName = "unit-rebuildall-onsave-parse: rebuildAllOnSave takes a named file")]
+    [InlineData("-rebuildAllOnSave")]
+    [InlineData("rebuildAllOnSave")]
+    public void RebuildAllOnSaveTakesANamedFile(string form)
+    {
+        var invocation = new CliArgumentParser()
+            .Parse(new[] { form, "rules.json" });
+
+        Assert.False(invocation.HasErrors, invocation.ErrorText);
+        Assert.Equal("rules.json", invocation.Options.rebuildAllOnSave);
     }
 
     [Fact(DisplayName = "unit-onsave-input-form: -i names the watched file")]

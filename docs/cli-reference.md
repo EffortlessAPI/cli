@@ -228,7 +228,15 @@ Running registered transpiler steps.
 - Aliases: `bos`
 - Bareword forms: `buildOnSave`, `bos`
 - Value type: `string`
-- Help text: Rebuild the project whenever a file is saved
+- Help text: Build from this folder whenever a file is saved
+- Description: 
+
+### `-rebuildAllOnSave`
+
+- Aliases: None
+- Bareword forms: `rebuildAllOnSave`
+- Value type: `string`
+- Help text: Rebuild the whole project whenever a file is saved
 - Description: 
 
 ### `-includeDisabled`

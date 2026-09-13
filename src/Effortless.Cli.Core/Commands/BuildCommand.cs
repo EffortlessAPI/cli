@@ -24,23 +24,43 @@ public sealed class BuildCommand
         bool all,
         bool withSubprojects = false)
     {
-        // -compileOnSave and -buildOnSave are the same watcher over the same
-        // file; they differ only in what runs on each save. compileOnSave runs
-        // compile-rulebook against that one file (the authoring inner loop);
-        // buildOnSave runs the whole build (downstream artifacts follow too).
+        // -compileOnSave, -buildOnSave and -rebuildAllOnSave are the same
+        // watcher over the same file; they differ only in what runs on each
+        // save. compileOnSave runs compile-rulebook against that one file (the
+        // authoring inner loop); buildOnSave runs `build`, scoped to the folder
+        // the watcher was started in; rebuildAllOnSave runs `buildAll` from the
+        // project root.
         var compileOnSave = invocation.Options.compileOnSave;
         var buildOnSave = invocation.Options.buildOnSave;
-        if (!string.IsNullOrWhiteSpace(compileOnSave)
-            || !string.IsNullOrWhiteSpace(buildOnSave))
+        var rebuildAllOnSave = invocation.Options.rebuildAllOnSave;
+        if (!string.IsNullOrWhiteSpace(compileOnSave))
         {
             return RunOnSave(
                 invocation,
                 all,
                 withSubprojects,
-                !string.IsNullOrWhiteSpace(compileOnSave)
-                    ? compileOnSave
-                    : buildOnSave,
-                compileOnly: !string.IsNullOrWhiteSpace(compileOnSave));
+                compileOnSave,
+                "-compileOnSave");
+        }
+
+        if (!string.IsNullOrWhiteSpace(buildOnSave))
+        {
+            return RunOnSave(
+                invocation,
+                all: false,
+                withSubprojects,
+                buildOnSave,
+                "-buildOnSave");
+        }
+
+        if (!string.IsNullOrWhiteSpace(rebuildAllOnSave))
+        {
+            return RunOnSave(
+                invocation,
+                all: true,
+                withSubprojects,
+                rebuildAllOnSave,
+                "-rebuildAllOnSave");
         }
 
         if (string.IsNullOrWhiteSpace(
@@ -81,56 +101,51 @@ public sealed class BuildCommand
         bool all,
         bool withSubprojects,
         string fileToWatch,
-        bool compileOnly)
+        string flag)
     {
         var project = invocation.Project!;
+        var compileOnly = flag == "-compileOnSave";
 
-        // A relative path means what it means in the shell: relative to where
-        // the user actually is. Running `-compileOnSave effortless-rulebook.json`
-        // from inside effortless-rulebook/ must watch the file right there, so
-        // the current directory is tried first. The project root is only a
-        // fallback, which keeps the from-the-root form
-        // (`-compileOnSave effortless-rulebook/effortless-rulebook.json`)
-        // working no matter which folder the CLI was invoked from.
-        var fileInfo = new FileInfo(
-            Path.IsPathRooted(fileToWatch)
-                ? fileToWatch
-                : Path.Combine(Environment.CurrentDirectory, fileToWatch));
-        if (!fileInfo.Exists && !Path.IsPathRooted(fileToWatch))
+        FileInfo? fileInfo;
+        if (fileToWatch == CliArgumentParser.FindRulebookToWatch)
         {
-            var fromProjectRoot = new FileInfo(
-                Path.Combine(project.RootPath, fileToWatch));
-            if (fromProjectRoot.Exists)
+            fileInfo = FindRulebookToWatch(
+                Environment.CurrentDirectory,
+                project.RootPath);
+            if (fileInfo is null)
             {
-                fileInfo = fromProjectRoot;
-            }
-        }
-
-        if (!fileInfo.Exists)
-        {
-            // The default is a convenience, so a project that does not have
-            // that rulebook has to be told to name its own file rather than
-            // being shown a path it never typed.
-            if (string.Equals(
-                    fileToWatch,
-                    CliArgumentParser.DefaultWatchedFile,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                var flag = compileOnly ? "-compileOnSave" : "-buildOnSave";
                 CliLog.LogLine(
-                    $"No file to watch: '{CliArgumentParser.DefaultWatchedFile}'"
-                    + " does not exist in this project.",
+                    "No rulebook to watch. Looked for:",
                     ConsoleColor.Red);
+                foreach (var candidate in RulebookSearchPaths(
+                             Environment.CurrentDirectory,
+                             project.RootPath))
+                {
+                    CliLog.LogLine($"  {candidate}", ConsoleColor.Red);
+                }
+
                 CliLog.LogLine(
-                    $"Name the file to watch: effortless {flag} <file>",
+                    $"Name the file to watch: effortless {flag} -i <file>",
                     ConsoleColor.Yellow);
                 return 1;
             }
-
-            CliLog.LogLine(
-                $"Cannot watch '{fileInfo.FullName}': the file does not exist.",
-                ConsoleColor.Red);
-            return 1;
+        }
+        else
+        {
+            // A named file is used as named: relative to where the user is,
+            // exactly as the shell means it. A missing one is an error, never a
+            // reason to go searching and watch some other file instead.
+            fileInfo = new FileInfo(
+                Path.IsPathRooted(fileToWatch)
+                    ? fileToWatch
+                    : Path.Combine(Environment.CurrentDirectory, fileToWatch));
+            if (!fileInfo.Exists)
+            {
+                CliLog.LogLine(
+                    $"Cannot watch '{fileInfo.FullName}': the file does not exist.",
+                    ConsoleColor.Red);
+                return 1;
+            }
         }
 
         var watcher = new SaveWatcher(writeLine: line => CliLog.LogLine(line));
@@ -204,6 +219,44 @@ public sealed class BuildCommand
 
         return 0;
     }
+
+    private static readonly string[] RulebookFileNames =
+    {
+        "effortless-rulebook.json",
+        "rulebook.json",
+    };
+
+    /// <summary>
+    /// Where a save watcher looks for the rulebook when no file is named, in
+    /// order: the current folder, the project root, then the project's
+    /// effortless-rulebook/ folder. In each, effortless-rulebook.json is tried
+    /// before rulebook.json. A folder reached twice (running from the root) is
+    /// only listed once.
+    /// </summary>
+    internal static IReadOnlyList<string> RulebookSearchPaths(
+        string currentDirectory,
+        string projectRoot)
+    {
+        var folders = new[]
+            {
+                currentDirectory,
+                projectRoot,
+                Path.Combine(projectRoot, "effortless-rulebook"),
+            }
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.Ordinal);
+        return folders
+            .SelectMany(folder => RulebookFileNames
+                .Select(name => Path.Combine(folder, name)))
+            .ToList();
+    }
+
+    internal static FileInfo? FindRulebookToWatch(
+        string currentDirectory,
+        string projectRoot) =>
+        RulebookSearchPaths(currentDirectory, projectRoot)
+            .Select(path => new FileInfo(path))
+            .FirstOrDefault(file => file.Exists);
 
     private int RunOnce(
         CliInvocation invocation,

@@ -33,15 +33,15 @@ public sealed class CliArgumentParser
             ["cos"] = "compileOnSave",
             ["buildOnSave"] = "buildOnSave",
             ["bos"] = "buildOnSave",
+            ["rebuildAllOnSave"] = "rebuildAllOnSave",
         };
 
     /// <summary>
-    /// The file -compileOnSave / -buildOnSave watch when the user names none.
-    /// Every project has this rulebook, and it is what the save loop is for,
-    /// so requiring it to be typed every time is friction with no choice in it.
+    /// What -compileOnSave / -buildOnSave / -rebuildAllOnSave hold when the
+    /// user names no file: search for the rulebook instead (see
+    /// BuildCommand.FindRulebookToWatch). Not a path; never shown to the user.
     /// </summary>
-    public const string DefaultWatchedFile =
-        "effortless-rulebook/effortless-rulebook.json";
+    public const string FindRulebookToWatch = "<find-rulebook>";
 
     private static readonly IReadOnlySet<string> SaveWatchFlags =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -50,6 +50,7 @@ public sealed class CliArgumentParser
             "-cos",
             "-buildOnSave",
             "-bos",
+            "-rebuildAllOnSave",
         };
 
     private static readonly IReadOnlySet<string> InputFlags =
@@ -168,11 +169,15 @@ public sealed class CliArgumentParser
                 break;
             case "compileOnSave":
                 options.compileOnSave =
-                    ConsumeStringValue(remainingArguments) ?? DefaultWatchedFile;
+                    ConsumeStringValue(remainingArguments) ?? FindRulebookToWatch;
                 break;
             case "buildOnSave":
                 options.buildOnSave =
-                    ConsumeStringValue(remainingArguments) ?? DefaultWatchedFile;
+                    ConsumeStringValue(remainingArguments) ?? FindRulebookToWatch;
+                break;
+            case "rebuildAllOnSave":
+                options.rebuildAllOnSave =
+                    ConsumeStringValue(remainingArguments) ?? FindRulebookToWatch;
                 break;
             case "listVersions":
                 options.listVersions = true;
@@ -249,9 +254,9 @@ public sealed class CliArgumentParser
     }
 
     /// <summary>
-    /// Settles the optional file argument of -compileOnSave / -buildOnSave
+    /// Settles the optional file argument of the save watchers
     /// before Plossum sees a string option standing on its own. Two shapes are
-    /// filled in here: the flag with nothing after it (watch the project's
+    /// filled in here: the flag with nothing after it (search for the
     /// rulebook), and the flag whose file was typed as an input
     /// (`-compileOnSave -i rules.json`), which means the same as naming the
     /// file positionally and so consumes that input rather than leaving it to
@@ -270,7 +275,7 @@ public sealed class CliArgumentParser
         }
 
         var settled = arguments.ToList();
-        var file = TakeInputValue(settled) ?? DefaultWatchedFile;
+        var file = TakeInputValue(settled) ?? FindRulebookToWatch;
 
         // Taking the input pair out can shift the flag, so find it again.
         var insertAt = settled.FindIndex(
