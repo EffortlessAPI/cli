@@ -218,7 +218,7 @@ Running registered transpiler steps.
 ### `-compileOnSave`
 
 - Aliases: `cos`
-- Bareword forms: None
+- Bareword forms: `compileOnSave`, `cos`
 - Value type: `string`
 - Help text: Recompile one rulebook whenever it is saved
 - Description: 
@@ -226,7 +226,7 @@ Running registered transpiler steps.
 ### `-buildOnSave`
 
 - Aliases: `bos`
-- Bareword forms: None
+- Bareword forms: `buildOnSave`, `bos`
 - Value type: `string`
 - Help text: Rebuild the project whenever a file is saved
 - Description: 
@@ -643,7 +643,7 @@ Tools that live inside the project at effortless-tools/<name>/ and are hosted by
 - `<root>/.gitignore` — Created by init with the standard ignore list; existing files get "effortless.env" appended when missing. Template lines: /**/obj/**/*, /**/bin/**/*, /**/.effortless/**/*, /**/.ssotme/**/*, /**/.vs/**/*, /**/node_modules/**/*, /**/.vscode/**/*, ssotme.env, effortless.env. The .ssotme and ssotme.env lines keep clones made with older releases clean.
 - `<root>/effortless-rulebook/effortless-rulebook.json` — Seed rulebook {"project":{"name":"<name>"}}.
 - `<root>/errors.json` — Per-build failure ledger (schema effortless-build-errors/v1, camelCase). Top-level: schema, generatedAt, startedAt, projectRoot, buildCommand, continueOnError, totalSteps, succeededSteps, failedSteps, skippedSteps, failedStepNames[], steps[] (name, relativePath, status, message, finishedAt), errors[] (StepRecord with exitCode, resolvedVersion, resolvedUrl, transpilerException, cliException chains).
-- `<root>/.effortless/<RelativePath>/<toolKey>.zfs` — GZip of the FileSet XML a step last produced (minus self-source entries). toolKey = sanitized POST URL for URL tools, else LowerHyphenName(Name). .effortless is created with the Hidden attribute.
+- `<root>/.effortless/<RelativePath>/<toolKey>.zfs` — GZip of the FileSet XML a step last produced; Never entries carry the CLI's CleanIfUnchanged stamp, self-source entries carry SkipClean=true. toolKey = sanitized POST URL for URL tools, else LowerHyphenName(Name). .effortless is created with the Hidden attribute.
 - `<root>/.effortless/<RelativePath>/<toolKey>.xml` — Uncompressed copy of the ledger written with -debug. Deleted by clean alongside the .zfs.
 - `<root>/.effortless/tempFileSet_<guid>.xml` — Transient copy of the output XML during SaveFileSet. Deleted immediately after extraction.
 - `~/.effortless/effortless.key (or effortless.<runAs>.key)` — { EmailAddress, Secret, APIKeys: { account: key } }. An empty key is returned when the file is missing. Migrated from ~/.ssotme/ssotme.key and ssotme.<runAs>.key by UserConfigMigration on first run.

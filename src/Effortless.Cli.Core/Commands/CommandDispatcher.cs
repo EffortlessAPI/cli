@@ -385,14 +385,7 @@ public sealed class CommandDispatcher
     }
 
     private static string DescribeFailure(TranspileConnectionFailure failure) =>
-        failure switch
-        {
-            TranspileConnectionFailure.HostNotFound => "DNS resolution failure",
-            TranspileConnectionFailure.ConnectionRefused => "connection refused",
-            TranspileConnectionFailure.TlsHandshake => "TLS handshake failure",
-            TranspileConnectionFailure.NoResponseWithinTimeout => "no response within waitTimeout",
-            _ => "a connection failure",
-        };
+        TranspileConnectionFailureText.Describe(failure);
 
     /// <summary>
     /// Step 11: validates the listTools/searchTools modifiers. Bad values are
@@ -870,8 +863,21 @@ public sealed class CommandDispatcher
         {
             if (result.IsCompleteTimeout)
             {
-                Console.WriteLine(
-                    $"[cli] {invocation.RawTranspilerArg ?? invocation.Transpiler} is offline at {invocation.TargetUrl}; {_remoteTools.DescribeCatalogAge()}.");
+                var toolName = invocation.RawTranspilerArg ?? invocation.Transpiler;
+                if (invocation.IsUserSetToolUrl)
+                {
+                    WriteError(
+                        $"[cli] {toolName} is offline at {invocation.TargetUrl}. That URL is your tool_urls.json override, not the catalog"
+                        + (string.IsNullOrEmpty(invocation.ResolvedVersionKey)
+                            ? "."
+                            : $" (catalog version {invocation.ResolvedVersionKey}).")
+                        + $" Run 'effortless -removeToolUrl {toolName}' to use the catalog.");
+                }
+                else
+                {
+                    Console.WriteLine(
+                        $"[cli] {toolName} is offline at {invocation.TargetUrl}; {_remoteTools.DescribeCatalogAge()}.");
+                }
             }
 
             var exception = result.Payload.Exception;
@@ -887,7 +893,10 @@ public sealed class CommandDispatcher
             }
             else
             {
-                PrintTranspilerError(invocation, exception);
+                PrintTranspilerError(
+                    invocation,
+                    exception,
+                    unreachable: result.IsCompleteTimeout);
             }
 
             if (activeStep is not null)
@@ -916,7 +925,8 @@ public sealed class CommandDispatcher
                 result.TranspilerKey,
                 result.CurrentDirectory,
                 result.Debug,
-                deleteEmptyDirs: false);
+                deleteEmptyDirs: false,
+                deleteUnchangedNever: true);
         }
         else if (result.OutputDisposition
                  == TranspileOutputDisposition.Save)
@@ -1313,13 +1323,23 @@ public sealed class CommandDispatcher
 
     private static void PrintTranspilerError(
         CliInvocation invocation,
-        Exception exception)
+        Exception exception,
+        bool unreachable = false)
     {
         if (invocation.SuppressTranspilerErrorOutput)
         {
             return;
         }
 
+        // A tool that never answered received no input and hit no internal
+        // error, so the "issue with the transpiler" box would misdirect.
+        if (unreachable)
+        {
+            PrintExceptionChain(exception);
+            return;
+        }
+
+        var toolName = invocation.RawTranspilerArg ?? invocation.Transpiler;
         WriteColor(
             "\n=======================================================",
             ConsoleColor.Yellow);
@@ -1330,8 +1350,8 @@ public sealed class CommandDispatcher
             "=======================================================",
             ConsoleColor.Yellow);
         WriteColor(
-            !string.IsNullOrEmpty(invocation.Transpiler)
-                ? $"This is likely an issue with the transpiler '{invocation.Transpiler}', not with Effortless."
+            !string.IsNullOrEmpty(toolName)
+                ? $"This is likely an issue with the transpiler '{toolName}', not with Effortless."
                 : "This is likely an issue with the transpiler, not with Effortless.",
             ConsoleColor.Yellow);
         WriteColor(
@@ -1340,6 +1360,11 @@ public sealed class CommandDispatcher
         WriteColor(
             "=======================================================\n",
             ConsoleColor.Yellow);
+        PrintExceptionChain(exception);
+    }
+
+    private static void PrintExceptionChain(Exception exception)
+    {
         for (var current = exception;
              current is not null;
              current = current.InnerException)

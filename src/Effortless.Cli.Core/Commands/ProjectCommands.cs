@@ -313,9 +313,9 @@ public sealed class ProjectCommands
               "HelloWhos": {
                 "Description": "The smallest complete rulebook: an id, a display name, and a rule that derives a greeting from it.",
                 "schema": [
-                  { "name": "HelloWhoId", "datatype": "string", "type": "raw", "nullable": false, "Description": "Stored identity of the row." },
-                  { "name": "Name", "datatype": "string", "type": "raw", "nullable": false, "Description": "Who is being greeted." },
-                  { "name": "Introduction", "datatype": "string", "type": "calculated", "nullable": false, "formula": "=\"Hello \" & {{Name}} & \"!\"", "Description": "The greeting, derived from Name. Never typed by hand." }
+                  { "name": "HelloWhoId", "datatype": "string", "type": "raw", "nullable": false },
+                  { "name": "Name", "datatype": "string", "type": "raw", "nullable": false },
+                  { "name": "Introduction", "datatype": "string", "type": "calculated", "nullable": false, "formula": "=\"Hello \" & {{Name}} & \"!\"" }
                 ],
                 "data": [
                   { "HelloWhoId": "world", "Name": "World" },

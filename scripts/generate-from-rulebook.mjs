@@ -328,7 +328,13 @@ function generateBarewordVerbs(options) {
   // NoDashCommandForms table instead (it consumes a trailing value argument
   // while leaving the tool position intact). They must not also appear as a
   // bareword verb here, or the verb table would try to assign bool to string.
-  const parserHandledStringOptions = new Set(["pin"]);
+  // The save watchers are there too because their value is optional: the
+  // parser supplies the default rulebook when no file is named.
+  const parserHandledStringOptions = new Set([
+    "pin",
+    "compileOnSave",
+    "buildOnSave",
+  ]);
 
   for (const option of options) {
     for (const verb of commaSeparated(option.BarewordForms)) {

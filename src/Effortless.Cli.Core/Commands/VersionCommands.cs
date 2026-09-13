@@ -116,12 +116,21 @@ public sealed class VersionCommands
             matches,
             project,
             invocation.CurrentDirectory);
+        var overrideUrl = _index.TryGetToolUrl(toolName);
         if (matched is null)
         {
             Console.WriteLine(
                 $"{toolName} is not used in this project — nothing to unpin here.");
-            Console.WriteLine(
-                $"Refreshed the core tools index; '{toolName}' will track latest (HEAD {head.VersionKey}) wherever it is used unpinned.");
+            if (string.IsNullOrEmpty(overrideUrl))
+            {
+                Console.WriteLine(
+                    $"Refreshed the core tools index; '{toolName}' will track latest (HEAD {head.VersionKey}) wherever it is used unpinned.");
+            }
+            else
+            {
+                WriteOverrideWarning(toolName, overrideUrl, head.VersionKey);
+            }
+
             return 0;
         }
 
@@ -133,8 +142,20 @@ public sealed class VersionCommands
         project.Save();
         Console.WriteLine(
             $"Upgraded {toolName}: {oldVersion} → HEAD ({head.VersionKey}, unpinned — will track latest)");
+        if (!string.IsNullOrEmpty(overrideUrl))
+        {
+            WriteOverrideWarning(toolName, overrideUrl, head.VersionKey);
+        }
+
         return 0;
     }
+
+    private static void WriteOverrideWarning(
+        string toolName,
+        string overrideUrl,
+        string headVersion) =>
+        WriteError(
+            $"WARNING: '{toolName}' will NOT run HEAD ({headVersion}): ~/.effortless/tool_urls.json overrides it with {overrideUrl}. Run 'effortless -removeToolUrl {toolName}' to use HEAD.");
 
     /// <summary>
     /// D17: pins this project's step to a catalog version key or a literal
@@ -295,6 +316,7 @@ public sealed class VersionCommands
             MissingProjectToolPolicy.Skip);
         var changedCount = plan.ChangedCount;
         var missingCount = plan.MissingCount;
+        var overriddenCount = 0;
         foreach (var entry in plan.Entries)
         {
             if (entry.IsMissing)
@@ -308,11 +330,20 @@ public sealed class VersionCommands
             {
                 Console.WriteLine(
                     $"  OK   {entry.ToolName} — already unpinned at HEAD ({entry.HeadVersion})");
-                continue;
+            }
+            else
+            {
+                Console.WriteLine(
+                    $"  UP   {entry.ToolName}: {entry.PreviousVersion} → HEAD ({entry.HeadVersion}, unpinned)");
             }
 
-            Console.WriteLine(
-                $"  UP   {entry.ToolName}: {entry.PreviousVersion} → HEAD ({entry.HeadVersion}, unpinned)");
+            var overrideUrl = _index.TryGetToolUrl(entry.ToolName);
+            if (!string.IsNullOrEmpty(overrideUrl))
+            {
+                overriddenCount++;
+                WriteError(
+                    $"  OVERRIDE {entry.ToolName} — runs {overrideUrl} from ~/.effortless/tool_urls.json, NOT HEAD; run 'effortless -removeToolUrl {entry.ToolName}' to use HEAD");
+            }
         }
 
         plan.Apply(project, clearPins: true);
@@ -320,6 +351,9 @@ public sealed class VersionCommands
             $"\nUpgraded {changedCount} tool(s)"
             + (missingCount > 0
                 ? $", skipped {missingCount}"
+                : string.Empty)
+            + (overriddenCount > 0
+                ? $", {overriddenCount} overridden by tool_urls.json"
                 : string.Empty)
             + ".");
         return 0;

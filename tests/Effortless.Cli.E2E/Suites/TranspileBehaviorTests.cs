@@ -315,6 +315,7 @@ public sealed class TranspileBehaviorTests
         var upsertEntry = firstLedger.Single(entry => entry.RelativePath == "in.txt");
         Assert.Equal("Never", upsertEntry.OverwriteMode);
         Assert.NotEqual(true, upsertEntry.AlwaysOverwrite);
+        Assert.Equal(true, upsertEntry.SkipClean);
 
         var generatedEntry = firstLedger.Single(entry => entry.RelativePath == "out.txt");
         Assert.Equal(true, generatedEntry.AlwaysOverwrite);
@@ -638,9 +639,8 @@ public sealed class TranspileBehaviorTests
         server.ThrowIfFaulted();
     }
 
-    [Fact(DisplayName = "tx-retry-host-not-found: unknown hosts log a retry then hit the requested wait bound")]
-    [Trait("Slow", "true")]
-    public async Task UnknownHostRetriesThenTimesOut()
+    [Fact(DisplayName = "tx-retry-host-not-found: an unknown host fails on the first attempt without retrying")]
+    public async Task UnknownHostFailsWithoutRetrying()
     {
         var cli = new CliUnderTest();
         await using var server = new MockToolServer();
@@ -652,17 +652,26 @@ public sealed class TranspileBehaviorTests
             new KeyValuePair<string, string>("ghost", "http://nonexistent.invalid/"));
 
         var result = await cli.Run(
-            ["ghost", "-i", "in.txt", "-w", "8000"],
+            ["ghost", "-i", "in.txt", "-w", "60000"],
             sandbox.ProjectPath,
             sandbox,
             timeoutMs: 20_000);
 
         Assert.True(result.Failed);
         Assert.Contains(
-            "Host not found: nonexistent.invalid. Retrying in 6 seconds...",
+            "Host not found: nonexistent.invalid. Not retrying: the host does not exist.",
             result.Combined,
             StringComparison.Ordinal);
-        Assert.Contains("Timed out waiting for cook", result.Combined, StringComparison.Ordinal);
+        Assert.DoesNotContain("Retrying in 6 seconds", result.Combined, StringComparison.Ordinal);
+        Assert.Contains(
+            "Could not reach the transpiler at http://nonexistent.invalid/ (DNS resolution failure)",
+            result.Combined,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("*** TRANSPILER ERROR ***", result.Combined, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "Timed out waiting for cook",
+            result.Combined,
+            StringComparison.Ordinal);
         Assert.Empty(server.Requests);
         server.ThrowIfFaulted();
     }
@@ -691,7 +700,14 @@ public sealed class TranspileBehaviorTests
             "SSL connection error. Retrying in 6 seconds... (attempt 1/10)",
             result.Combined,
             StringComparison.Ordinal);
-        Assert.Contains("Timed out waiting for cook", result.Combined, StringComparison.Ordinal);
+        Assert.Contains(
+            "(TLS handshake failure); it never answered.",
+            result.Combined,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "Timed out waiting for cook",
+            result.Combined,
+            StringComparison.Ordinal);
         Assert.Empty(server.Requests);
         server.ThrowIfFaulted();
     }
@@ -728,7 +744,49 @@ public sealed class TranspileBehaviorTests
             "ERROR: Connection refused 3 times for: http://127.0.0.1:1/",
             result.Combined,
             StringComparison.Ordinal);
-        Assert.Contains("Timed out waiting for cook", result.Combined, StringComparison.Ordinal);
+        Assert.Contains(
+            "Could not reach the transpiler at http://127.0.0.1:1/ (connection refused)",
+            result.Combined,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "Timed out waiting for cook",
+            result.Combined,
+            StringComparison.Ordinal);
+        Assert.Empty(server.Requests);
+        server.ThrowIfFaulted();
+    }
+
+    [Fact(DisplayName = "tx-unreachable-fails-fast: an unreachable tool fails in retry time, not after the whole waitTimeout")]
+    [Trait("Slow", "true")]
+    public async Task UnreachableToolFailsWithoutWaitingOutTheWholeTimeout()
+    {
+        var cli = new CliUnderTest();
+        await using var server = new MockToolServer();
+        using var sandbox = CreateSandbox(cli, server);
+        sandbox.WriteFile("in.txt", "input");
+        WriteToolUrls(
+            sandbox,
+            server,
+            new KeyValuePair<string, string>("dead", "http://127.0.0.1:1/"));
+
+        var result = await cli.Run(
+            ["dead", "-i", "in.txt", "-w", "120000"],
+            sandbox.ProjectPath,
+            sandbox,
+            timeoutMs: 90_000);
+
+        Assert.True(result.Failed);
+        Assert.Contains(
+            "Could not reach the transpiler at http://127.0.0.1:1/ (connection refused)",
+            result.Combined,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "Timed out waiting for cook",
+            result.Combined,
+            StringComparison.Ordinal);
+        Assert.True(
+            result.Duration < TimeSpan.FromSeconds(60),
+            $"An unreachable tool must fail once its retries are spent, not after -w; took {result.Duration}.");
         Assert.Empty(server.Requests);
         server.ThrowIfFaulted();
     }

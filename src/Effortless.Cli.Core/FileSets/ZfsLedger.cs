@@ -207,6 +207,97 @@ public static class ZfsLedger
         return doc.OuterXml;
     }
 
+    /// <summary>
+    /// Stamps every OverwriteMode=Never entry so clean may delete it while it still
+    /// matches what the tool generated, and returns the rewritten XML.
+    /// </summary>
+    /// <remarks>
+    /// A Never entry whose resolved path is one of this run's input files (the in-place
+    /// upsert, already downgraded by <see cref="DowngradeInPlaceUpserts"/>) is the user's
+    /// own source of truth: it gets SkipClean=true and no stamp, so an unedited rulebook is
+    /// never deleted. An entry the tool already declared SkipClean is left alone. Every
+    /// other Never entry gets CleanIfUnchanged=true. The stamp is opt-in on purpose: a
+    /// ledger written before it existed may hold the user's rulebook as a plain Never
+    /// entry, and <see cref="FileSetCleaner"/> keeps every unstamped Never file.
+    /// </remarks>
+    public static string MarkCleanIfUnchanged(
+        EffortlessProject project,
+        string inputFileSetXml,
+        string fileSetXml,
+        string extractToDir)
+    {
+        if (string.IsNullOrEmpty(fileSetXml) || !fileSetXml.Contains("<"))
+        {
+            return fileSetXml;
+        }
+
+        XmlDocument doc;
+        try
+        {
+            doc = new XmlDocument();
+            doc.LoadXml(fileSetXml.Substring(fileSetXml.IndexOf("<")));
+        }
+        catch (Exception)
+        {
+            return fileSetXml;
+        }
+
+        if (doc.DocumentElement is null ||
+            doc.DocumentElement.Name != "FileSet")
+        {
+            return fileSetXml;
+        }
+
+        var inputFullPaths = project is null || string.IsNullOrEmpty(inputFileSetXml)
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : GetInputFullPaths(project, inputFileSetXml);
+
+        foreach (XmlElement fsfElem in
+                 doc.DocumentElement.SelectNodes("//FileSetFile"))
+        {
+            if (IsAlwaysOverwriteElement(fsfElem))
+            {
+                continue;
+            }
+
+            var isInput = fsfElem.SelectNodes("RelativePath")
+                .Cast<XmlElement>()
+                .Select(rp => ResolveFullPath(extractToDir, rp.InnerText))
+                .Any(fp => fp is not null && inputFullPaths.Contains(fp));
+
+            if (isInput)
+            {
+                SetChildText(fsfElem, "SkipClean", "true");
+                var stamp = fsfElem.SelectSingleNode("CleanIfUnchanged");
+                if (!ReferenceEquals(stamp, null))
+                {
+                    fsfElem.RemoveChild(stamp);
+                }
+            }
+            else if (!string.Equals(
+                         fsfElem.SelectSingleNode("SkipClean")?.InnerText,
+                         "true",
+                         StringComparison.OrdinalIgnoreCase))
+            {
+                SetChildText(fsfElem, "CleanIfUnchanged", "true");
+            }
+        }
+
+        return doc.OuterXml;
+    }
+
+    private static void SetChildText(XmlElement parent, string name, string text)
+    {
+        var node = parent.SelectSingleNode(name);
+        if (ReferenceEquals(node, null))
+        {
+            node = parent.OwnerDocument.CreateElement(name);
+            parent.AppendChild(node);
+        }
+
+        node.InnerText = text;
+    }
+
     private static HashSet<string> GetInputFullPaths(
         EffortlessProject project,
         string inputFileSetXml)
@@ -511,6 +602,12 @@ public static class ZfsLedger
             out var inPlaceUpsertPaths,
             debug);
 
+        fileSetXml = MarkCleanIfUnchanged(
+            project,
+            inputFileSetXml,
+            fileSetXml,
+            extractToDir);
+
         // A project built before this rule existed already has the user's file recorded
         // in its .zfs as a generated Always file. Prune those entries before the clean
         // pass runs, so a previously poisoned project self-heals instead of losing the
@@ -612,7 +709,8 @@ public static class ZfsLedger
         string transpilerKey,
         string cwd,
         bool debug = false,
-        bool deleteEmptyDirs = true)
+        bool deleteEmptyDirs = true,
+        bool deleteUnchangedNever = false)
     {
         if (project is null)
         {
@@ -625,7 +723,8 @@ public static class ZfsLedger
             var previousFileSet = File.ReadAllBytes(zfsFI.FullName);
             previousFileSet.CleanZippedFileSet(
                 debug,
-                deleteEmptyDirs);
+                deleteEmptyDirs,
+                deleteUnchangedNever);
         }
     }
 }

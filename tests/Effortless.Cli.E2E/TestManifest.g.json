@@ -940,11 +940,19 @@
     "suite": "e2e-transpile",
     "priority": "P1",
     "status": "green",
-    "slow": true,
+    "slow": false,
     "interactive": false
   },
   {
     "id": "tx-connection-refused",
+    "suite": "e2e-transpile",
+    "priority": "P1",
+    "status": "green",
+    "slow": true,
+    "interactive": false
+  },
+  {
+    "id": "tx-unreachable-fails-fast",
     "suite": "e2e-transpile",
     "priority": "P1",
     "status": "green",
@@ -1312,6 +1320,14 @@
     "interactive": false
   },
   {
+    "id": "res-upgrade-override-warning",
+    "suite": "e2e-resolution",
+    "priority": "P0",
+    "status": "green",
+    "slow": false,
+    "interactive": false
+  },
+  {
     "id": "res-upgrade-no-project",
     "suite": "e2e-resolution",
     "priority": "P1",
@@ -1328,6 +1344,14 @@
     "interactive": false
   },
   {
+    "id": "res-upgrade-all-override",
+    "suite": "e2e-resolution",
+    "priority": "P0",
+    "status": "green",
+    "slow": false,
+    "interactive": false
+  },
+  {
     "id": "res-upgrade-cwd-disambiguation",
     "suite": "e2e-resolution",
     "priority": "P2",
@@ -1337,6 +1361,14 @@
   },
   {
     "id": "res-user-set-override",
+    "suite": "e2e-resolution",
+    "priority": "P0",
+    "status": "green",
+    "slow": false,
+    "interactive": false
+  },
+  {
+    "id": "res-user-set-offline",
     "suite": "e2e-resolution",
     "priority": "P0",
     "status": "green",

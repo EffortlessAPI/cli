@@ -936,6 +936,40 @@ public sealed class ResolutionTests
         Assert.Empty(toolServer.Requests);
     }
 
+    [Fact(DisplayName = "res-upgrade-override-warning: upgrade warns when tool_urls.json overrides the tool")]
+    public async Task UpgradeWarnsWhenToolUrlsOverridesTheTool()
+    {
+        var cli = new CliUnderTest();
+        await using var toolServer = new MockToolServer();
+        await using var bridge = new ResolutionBridgeServer();
+        var index = IndexFixture.Load(toolServer);
+        bridge.IndexJson = index.Json;
+        using var sandbox = Sandbox.Create(cli);
+        ResolutionTestSupport.SeedHome(sandbox, index, bridge.BridgeUri);
+        var overrideUrl = "https://stale-to-uppercase.invalid/";
+        ResolutionTestSupport.WriteToolUrls(
+            sandbox,
+            new Dictionary<string, string>
+            {
+                ["cli-cloud-bridge"] = bridge.BridgeUri.ToString(),
+                ["to-uppercase"] = overrideUrl,
+            });
+        ResolutionTestSupport.SeedProject(sandbox);
+
+        var result = await cli.Run(
+            ["upgrade", "to-uppercase"],
+            sandbox.ProjectPath,
+            sandbox);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains(
+            $"WARNING: 'to-uppercase' will NOT run HEAD ({ResolutionTestSupport.HeadVersion}): ~/.effortless/tool_urls.json overrides it with {overrideUrl}. Run 'effortless -removeToolUrl to-uppercase' to use HEAD.",
+            result.Stdout,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("will track latest", result.Stdout, StringComparison.Ordinal);
+        Assert.Empty(toolServer.Requests);
+    }
+
     [Fact(DisplayName = "res-upgrade-no-project: upgrade outside a project")]
     public async Task UpgradeOutsideProjectReportsNoProjectAfterRefresh()
     {
@@ -1068,6 +1102,90 @@ public sealed class ResolutionTests
         Assert.Equal(
             ResolutionTestSupport.HeadVersion,
             step["LastVersionUsed"]?.GetValue<string>());
+    }
+
+    [Fact(DisplayName = "res-upgrade-all-override: upgradeAll flags steps whose tool is overridden")]
+    public async Task UpgradeAllFlagsOverriddenSteps()
+    {
+        var cli = new CliUnderTest();
+        await using var toolServer = new MockToolServer();
+        await using var bridge = new ResolutionBridgeServer();
+        var index = IndexFixture.Load(toolServer);
+        bridge.IndexJson = index.Json;
+        using var sandbox = Sandbox.Create(cli);
+        ResolutionTestSupport.SeedHome(sandbox, index, bridge.BridgeUri);
+        var overrideUrl = "https://stale-to-uppercase.invalid/";
+        ResolutionTestSupport.WriteToolUrls(
+            sandbox,
+            new Dictionary<string, string>
+            {
+                ["cli-cloud-bridge"] = bridge.BridgeUri.ToString(),
+                ["to-uppercase"] = overrideUrl,
+            });
+        ResolutionTestSupport.SeedProject(
+            sandbox,
+            new ResolutionProjectStep(
+                "To Uppercase",
+                "",
+                "to-uppercase -i in.txt",
+                LastVersionUsed: ResolutionTestSupport.HeadVersion));
+
+        var result = await cli.Run(["-upgradeAll"], sandbox.ProjectPath, sandbox);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains(
+            $"  OK   to-uppercase — already unpinned at HEAD ({ResolutionTestSupport.HeadVersion})",
+            result.Stdout,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"  OVERRIDE to-uppercase — runs {overrideUrl} from ~/.effortless/tool_urls.json, NOT HEAD; run 'effortless -removeToolUrl to-uppercase' to use HEAD",
+            result.Stdout,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Upgraded 0 tool(s), 1 overridden by tool_urls.json.",
+            result.Stdout,
+            StringComparison.Ordinal);
+        Assert.Empty(toolServer.Requests);
+    }
+
+    [Fact(DisplayName = "res-user-set-offline: a dead tool_urls override is reported as the override, not the catalog")]
+    public async Task DeadUserSetOverrideIsReportedAsTheOverride()
+    {
+        var cli = new CliUnderTest();
+        await using var server = new MockToolServer();
+        var index = IndexFixture.Load(server);
+        using var sandbox = Sandbox.Create(cli);
+        ResolutionTestSupport.SeedHome(sandbox, index);
+        var overrideUrl = "https://stale-to-uppercase.invalid/";
+        ResolutionTestSupport.WriteToolUrls(
+            sandbox,
+            new Dictionary<string, string>
+            {
+                ["cli-cloud-bridge"] = index.BridgeUri.ToString(),
+                ["to-uppercase"] = overrideUrl,
+            });
+        ResolutionTestSupport.SeedProject(sandbox);
+        sandbox.WriteFile("in.txt", "input");
+
+        var result = await cli.Run(
+            ["to-uppercase", "-i", "in.txt"],
+            sandbox.ProjectPath,
+            sandbox,
+            timeoutMs: 30_000);
+
+        Assert.True(result.Failed);
+        Assert.Contains(
+            $"to-uppercase is offline at {overrideUrl}. That URL is your tool_urls.json override, not the catalog",
+            result.Stdout,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Run 'effortless -removeToolUrl to-uppercase' to use the catalog.",
+            result.Stdout,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("catalog age", result.Stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("CLOUD-BRIDGE CALL TRIGGERED", result.Stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("*** TRANSPILER ERROR ***", result.Combined, StringComparison.Ordinal);
+        Assert.Empty(server.Requests);
     }
 
     [Fact(DisplayName = "res-user-set-unknown-tool: tool_urls-only tool")]

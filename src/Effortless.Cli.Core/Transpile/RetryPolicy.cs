@@ -46,10 +46,15 @@ public sealed class RetryPolicy
         if (socketException?.SocketErrorCode == SocketError.HostNotFound
             || exception.Message.Contains("No such host", StringComparison.OrdinalIgnoreCase))
         {
-            return Retry(
+            // A host that does not resolve has no workload to boot up, so
+            // retrying only delays the failure.
+            return new TranspileRetryDecision(
                 TranspileRetryKind.HostNotFound,
-                ConnectionDelay,
-                $"[{toolLabel}] Host not found: {targetUrl.Host}. Retrying in 6 seconds... (attempt {retryAttempt}/{MaxRetries})");
+                ShouldRetry: false,
+                ShouldAbort: true,
+                TimeSpan.Zero,
+                $"[cli] [{toolLabel}] Host not found: {targetUrl.Host}. Not retrying: the host does not exist.",
+                ConsoleColor.Red);
         }
 
         if (socketException?.SocketErrorCode == SocketError.ConnectionRefused)

@@ -9,7 +9,8 @@ public static class FileSetCleaner
     public static void CleanZippedFileSet(
         this byte[] zippedFileSet,
         bool debug = false,
-        bool deleteEmptyDirs = true)
+        bool deleteEmptyDirs = true,
+        bool deleteUnchangedNever = false)
     {
         if (debug)
         {
@@ -23,7 +24,7 @@ public static class FileSetCleaner
                 $"DEBUG: Unzipped XML length: {fileSetXml.Length} chars, calling CleanFileSet()");
         }
 
-        fileSetXml.CleanFileSet(debug, deleteEmptyDirs);
+        fileSetXml.CleanFileSet(debug, deleteEmptyDirs, deleteUnchangedNever);
         if (debug)
         {
             System.Console.WriteLine("DEBUG: CleanFileSet() completed");
@@ -33,7 +34,8 @@ public static class FileSetCleaner
     public static void CleanFileSet(
         this string fileSetXml,
         bool debug,
-        bool deleteEmptyDirs = true)
+        bool deleteEmptyDirs = true,
+        bool deleteUnchangedNever = false)
     {
         if (debug)
         {
@@ -95,7 +97,7 @@ public static class FileSetCleaner
                         System.Console.WriteLine($"DEBUG: Processing file: {relPathElem.InnerText}");
                     }
 
-                    CleanFileByRelativeName(fileSetFileElem, relPathElem, debug);
+                    CleanFileByRelativeName(fileSetFileElem, relPathElem, debug, deleteUnchangedNever);
                 }
                 else if (debug)
                 {
@@ -150,7 +152,8 @@ public static class FileSetCleaner
     private static void CleanFileByRelativeName(
         XmlElement fileSetFileElem,
         XmlNode relPathElem,
-        bool debug)
+        bool debug,
+        bool deleteUnchangedNever)
     {
         if (debug)
         {
@@ -229,7 +232,8 @@ public static class FileSetCleaner
             string value = string.Empty;
             if (!ReferenceEquals(fileContentsNode, null))
             {
-                value = WebUtility.HtmlDecode(fileContentsNode.InnerXml);
+                // Decode exactly as FileSetWriter does, or an untouched file never compares equal.
+                value = WebUtility.HtmlDecode(fileContentsNode.InnerXml).UnwrapCDATA();
             }
             else if (!ReferenceEquals(zippedFileContents, null))
             {
@@ -273,13 +277,25 @@ public static class FileSetCleaner
                 }
             }
 
-            if (!neverOverwrite)
+            // A Never file is the user's to edit, so it survives clean once edited. While it
+            // still matches what the tool generated it is ours, and an explicit clean removes
+            // it (the pre-write pass of a build does not: Never is written once, never replaced).
+            // Only entries the CLI stamped CleanIfUnchanged qualify (see ZfsLedger.MarkCleanIfUnchanged):
+            // a ledger written before the stamp existed may hold the user's own rulebook as Never.
+            XmlNode cleanIfUnchangedNode = fileSetFileElem.SelectSingleNode("CleanIfUnchanged");
+            bool cleanIfUnchanged = deleteUnchangedNever &&
+                                    !ReferenceEquals(cleanIfUnchangedNode, null) &&
+                                    string.Equals(cleanIfUnchangedNode.InnerText, "true", StringComparison.OrdinalIgnoreCase);
+
+            if (!neverOverwrite || (cleanIfUnchanged && contentMatches))
             {
                 CliLog.Cleaning(fiToClean.FullName);
                 if (debug)
                 {
                     System.Console.WriteLine(
-                        "DEBUG: File deleted - Reason: AlwaysOverwrite=true");
+                        !neverOverwrite
+                            ? "DEBUG: File deleted - Reason: AlwaysOverwrite=true"
+                            : "DEBUG: File deleted - Reason: OverwriteMode=Never but unchanged since generated");
                 }
 
                 fiToClean.Delete();
@@ -291,7 +307,9 @@ public static class FileSetCleaner
             else if (debug)
             {
                 System.Console.WriteLine(
-                    "DEBUG: File NOT deleted - Reason: OverwriteMode=Never (preserving hand-edits)");
+                    cleanIfUnchanged
+                        ? "DEBUG: File NOT deleted - Reason: OverwriteMode=Never and hand-edited"
+                        : "DEBUG: File NOT deleted - Reason: OverwriteMode=Never (preserving hand-edits)");
             }
         }
     }

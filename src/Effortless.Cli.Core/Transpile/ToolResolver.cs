@@ -33,6 +33,7 @@ public sealed class ToolResolver
         ArgumentNullException.ThrowIfNull(invocation);
         invocation.Options ??= new CliOptions();
         invocation.IsCatalogResolved = false;
+        invocation.IsUserSetToolUrl = false;
 
         if (string.IsNullOrWhiteSpace(invocation.Account))
         {
@@ -253,6 +254,7 @@ public sealed class ToolResolver
         invocation.TargetUrl = url;
         invocation.Transpiler = NameHelpers.SanitizeUrlForFilename(url);
         invocation.ResolvedVersionLabel = $"{rawName} [user-set]";
+        invocation.IsUserSetToolUrl = true;
         invocation.HasExplicitVersionError =
             remote?.HasExplicitVersionError == true;
 

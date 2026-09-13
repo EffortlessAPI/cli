@@ -288,7 +288,7 @@ public class CleanRunner
                     $"DEBUG: Read {zippedFileSet.Length} bytes from {zfsFile.FullName}, calling CleanZippedFileSet()");
             }
 
-            zippedFileSet.CleanZippedFileSet(debug);
+            zippedFileSet.CleanZippedFileSet(debug, deleteUnchangedNever: true);
             if (debug)
             {
                 Console.WriteLine(
@@ -465,7 +465,7 @@ public class CleanRunner
                             $"DEBUG: Read {zippedFileSet.Length} bytes from orphaned ZFS, calling CleanZippedFileSet()");
                     }
 
-                    zippedFileSet.CleanZippedFileSet(debug);
+                    zippedFileSet.CleanZippedFileSet(debug, deleteUnchangedNever: true);
                     if (debug)
                     {
                         Console.WriteLine(

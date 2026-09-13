@@ -29,6 +29,34 @@ public sealed class CliArgumentParser
             ["uc"] = "checkVersion",
             ["update"] = "checkVersion",
             ["pin"] = "pin",
+            ["compileOnSave"] = "compileOnSave",
+            ["cos"] = "compileOnSave",
+            ["buildOnSave"] = "buildOnSave",
+            ["bos"] = "buildOnSave",
+        };
+
+    /// <summary>
+    /// The file -compileOnSave / -buildOnSave watch when the user names none.
+    /// Every project has this rulebook, and it is what the save loop is for,
+    /// so requiring it to be typed every time is friction with no choice in it.
+    /// </summary>
+    public const string DefaultWatchedFile =
+        "effortless-rulebook/effortless-rulebook.json";
+
+    private static readonly IReadOnlySet<string> SaveWatchFlags =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "-compileOnSave",
+            "-cos",
+            "-buildOnSave",
+            "-bos",
+        };
+
+    private static readonly IReadOnlySet<string> InputFlags =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "-input",
+            "-i",
         };
 
     public CliInvocation Parse(string[] argv)
@@ -138,6 +166,14 @@ public sealed class CliArgumentParser
                 }
 
                 break;
+            case "compileOnSave":
+                options.compileOnSave =
+                    ConsumeStringValue(remainingArguments) ?? DefaultWatchedFile;
+                break;
+            case "buildOnSave":
+                options.buildOnSave =
+                    ConsumeStringValue(remainingArguments) ?? DefaultWatchedFile;
+                break;
             case "listVersions":
                 options.listVersions = true;
                 break;
@@ -209,7 +245,57 @@ public sealed class CliArgumentParser
             normalized[0] = "-" + canonicalCommand;
         }
 
-        return normalized;
+        return ResolveSaveWatchFile(normalized);
+    }
+
+    /// <summary>
+    /// Settles the optional file argument of -compileOnSave / -buildOnSave
+    /// before Plossum sees a string option standing on its own. Two shapes are
+    /// filled in here: the flag with nothing after it (watch the project's
+    /// rulebook), and the flag whose file was typed as an input
+    /// (`-compileOnSave -i rules.json`), which means the same as naming the
+    /// file positionally and so consumes that input rather than leaving it to
+    /// be passed on to a build.
+    /// </summary>
+    private static string[] ResolveSaveWatchFile(string[] arguments)
+    {
+        var flagIndex = Array.FindIndex(
+            arguments,
+            argument => SaveWatchFlags.Contains(argument ?? string.Empty));
+        if (flagIndex < 0 ||
+            (flagIndex + 1 < arguments.Length &&
+             IsBareword(arguments[flagIndex + 1])))
+        {
+            return arguments;
+        }
+
+        var settled = arguments.ToList();
+        var file = TakeInputValue(settled) ?? DefaultWatchedFile;
+
+        // Taking the input pair out can shift the flag, so find it again.
+        var insertAt = settled.FindIndex(
+            argument => SaveWatchFlags.Contains(argument ?? string.Empty));
+        settled.Insert(insertAt + 1, file);
+        return settled.ToArray();
+    }
+
+    private static string TakeInputValue(IList<string> arguments)
+    {
+        for (var index = 0; index < arguments.Count - 1; index++)
+        {
+            if (!InputFlags.Contains(arguments[index] ?? string.Empty) ||
+                !IsBareword(arguments[index + 1]))
+            {
+                continue;
+            }
+
+            var value = arguments[index + 1];
+            arguments.RemoveAt(index + 1);
+            arguments.RemoveAt(index);
+            return value;
+        }
+
+        return null;
     }
 
     private static string NormalizeLeadingNoDashCommand(

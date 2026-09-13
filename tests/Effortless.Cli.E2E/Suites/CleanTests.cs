@@ -20,6 +20,7 @@ public sealed class CleanTests
             "to-uppercase",
             ToolBehavior.Files(
                 FileSetEntry.TextFile("out.txt", "remove", alwaysOverwrite: true),
+                FileSetEntry.TextFile("untouched.txt", "scaffold", overwriteMode: "Never"),
                 FileSetEntry.TextFile("keep.txt", "keep", overwriteMode: "Never"),
                 FileSetEntry.TextFile("skip.txt", "skip", alwaysOverwrite: true, skipClean: true),
                 FileSetEntry.BinaryFile(
@@ -31,6 +32,9 @@ public sealed class CleanTests
         Assert.Equal(0, build.ExitCode);
         Assert.Single(WorkflowTestSupport.ZfsFiles(sandbox));
 
+        // A hand-edit is what makes a Never file the user's; an unedited one is still generated output.
+        sandbox.WriteFile("keep.txt", "keep, hand edited");
+
         var result = await cli.Run([form], sandbox.ProjectPath, sandbox);
 
         Assert.Equal(0, result.ExitCode);
@@ -39,8 +43,9 @@ public sealed class CleanTests
         Assert.Contains("bin.dat", result.Stdout, StringComparison.Ordinal);
         Assert.False(File.Exists(Path.Combine(sandbox.ProjectPath, "out.txt")));
         Assert.False(File.Exists(Path.Combine(sandbox.ProjectPath, "empty", "bin.dat")));
+        Assert.False(File.Exists(Path.Combine(sandbox.ProjectPath, "untouched.txt")));
         Assert.False(Directory.Exists(Path.Combine(sandbox.ProjectPath, "empty")));
-        Assert.Equal("keep", sandbox.ReadFile("keep.txt"));
+        Assert.Equal("keep, hand edited", sandbox.ReadFile("keep.txt"));
         Assert.Equal("skip", sandbox.ReadFile("skip.txt"));
         Assert.Empty(WorkflowTestSupport.ZfsFiles(sandbox));
         Assert.True(Directory.Exists(sandbox.ProjectPath));

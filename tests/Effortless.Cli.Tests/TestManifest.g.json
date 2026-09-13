@@ -168,6 +168,30 @@
     "interactive": false
   },
   {
+    "id": "unit-onsave-default-file",
+    "suite": "unit-core",
+    "priority": "P1",
+    "status": "green",
+    "slow": false,
+    "interactive": false
+  },
+  {
+    "id": "unit-onsave-input-form",
+    "suite": "unit-core",
+    "priority": "P1",
+    "status": "green",
+    "slow": false,
+    "interactive": false
+  },
+  {
+    "id": "unit-onsave-barewords",
+    "suite": "unit-core",
+    "priority": "P1",
+    "status": "green",
+    "slow": false,
+    "interactive": false
+  },
+  {
     "id": "unit-empty-folder-pruner",
     "suite": "unit-core",
     "priority": "P0",

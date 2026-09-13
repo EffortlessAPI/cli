@@ -649,41 +649,41 @@
         "CliOptionId": "compileOnSave",
         "Flag": "-compileOnSave",
         "Aliases": "cos",
-        "BarewordForms": "",
+        "BarewordForms": "compileOnSave,cos",
         "ValueType": "string",
         "HelpText": "Recompile one rulebook whenever it is saved",
         "Category": "build",
         "Disposition": "keep",
         "IsCommand": false,
         "ConsumesNextArgAsTool": false,
-        "HandlerNotes": "RulebookSaveWatcher debounces FileSystemWatcher events, then invokes the compile-rulebook command line for that single file. A run in flight sets a pending flag rather than starting a second run; self-writes are suppressed via an in-flight gate plus a settle window.",
+        "HandlerNotes": "RulebookSaveWatcher debounces FileSystemWatcher events, then invokes the compile-rulebook command line for that single file. A run in flight sets a pending flag rather than starting a second run; self-writes are suppressed via an in-flight gate plus a settle window. The file argument is optional: CliArgumentParser fills in effortless-rulebook/effortless-rulebook.json when the flag is given without one, and accepts the -input form as the same argument.",
         "DispositionReason": "New capability in the save-driven loop: the rulebook is the thing being edited, so saving it is what should drive recomputation.",
         "Description": "",
         "Tier": "secondary",
         "Rationale": "Compiling is the inner loop when authoring rules; making the save itself trigger it removes the one manual step between editing a formula and seeing its values.",
         "HelpSummary": "Recompile one rulebook whenever it is saved",
-        "HelpDetail": "Watches the given rulebook file and runs compile-rulebook against that one file each time it is saved, so calculated values follow a formula edit without typing a build. Runs until Ctrl+C. Never runs twice at once: saves that arrive while a compile is in flight coalesce into exactly one follow-up compile, and the tool's own write-back is not treated as a change. A failed compile is reported and the watcher keeps running.",
-        "Example": "effortless -compileOnSave effortless-rulebook/effortless-rulebook.json"
+        "HelpDetail": "Watches a rulebook file and runs compile-rulebook against that one file each time it is saved, so calculated values follow a formula edit without typing a build. The file is optional: with no file it watches effortless-rulebook/effortless-rulebook.json, and says to name one if that file is not there. Name it positionally or as an input (`-compileOnSave rules.json` and `-compileOnSave -i rules.json` mean the same thing). Runs until Ctrl+C. Never runs twice at once: saves that arrive while a compile is in flight coalesce into exactly one follow-up compile, and the tool's own write-back is not treated as a change. A failed compile is reported and the watcher keeps running.",
+        "Example": "effortless compileOnSave"
       },
       {
         "CliOptionId": "buildOnSave",
         "Flag": "-buildOnSave",
         "Aliases": "bos",
-        "BarewordForms": "",
+        "BarewordForms": "buildOnSave,bos",
         "ValueType": "string",
         "HelpText": "Rebuild the project whenever a file is saved",
         "Category": "build",
         "Disposition": "keep",
         "IsCommand": false,
         "ConsumesNextArgAsTool": false,
-        "HandlerNotes": "Shares RulebookSaveWatcher with compileOnSave; the only difference is the action invoked (full build instead of the single compile-rulebook command line).",
+        "HandlerNotes": "Shares RulebookSaveWatcher with compileOnSave; the only difference is the action invoked (full build instead of the single compile-rulebook command line). Takes the same optional file argument, defaulted and -input-accepting in CliArgumentParser.",
         "DispositionReason": "New capability in the save-driven loop: the rulebook is the thing being edited, so saving it is what should drive recomputation.",
         "Description": "",
         "Tier": "secondary",
         "Rationale": "The same save-driven loop as -compileOnSave, for projects whose downstream transpilers (docs, SQL, code) should follow the edit too, not just the rulebook's own values.",
         "HelpSummary": "Rebuild the project whenever a file is saved",
-        "HelpDetail": "Watches the given file and runs a full build each time it is saved. Identical re-entrancy behavior to -compileOnSave: never two builds at once, saves during a build coalesce into exactly one follow-up build, and a failed build is reported without stopping the watcher. Runs until Ctrl+C.",
-        "Example": "effortless -buildOnSave effortless-rulebook/effortless-rulebook.json"
+        "HelpDetail": "Watches a file and runs a full build each time it is saved. Takes the same optional file argument as -compileOnSave: no file watches effortless-rulebook/effortless-rulebook.json, and `-buildOnSave -i rules.json` means the same as `-buildOnSave rules.json`. Identical re-entrancy behavior: never two builds at once, saves during a build coalesce into exactly one follow-up build, and a failed build is reported without stopping the watcher. Runs until Ctrl+C.",
+        "Example": "effortless buildOnSave"
       },
       {
         "CliOptionId": "debug",
@@ -1510,7 +1510,7 @@
         "Disposition": "keep",
         "IsCommand": true,
         "ConsumesNextArgAsTool": true,
-        "HandlerNotes": "HandleUpgradeCommand: RefreshRemoteTools first; with a tool: resolve HEAD, find the installed step (DisambiguateByCurrentDirectory), PinnedVersion=null, LastVersionUsed=head, Save, \"Upgraded x: old -> HEAD (v, unpinned \u2014 will track latest)\"; not installed => informational message; without a tool: UpgradeAllTools. D17: this is the only path that clears PinnedVersion - it calls ProjectToolFreshness.Apply(project, clearPins: true). The automatic build-time gate passes false and leaves pins alone.",
+        "HandlerNotes": "HandleUpgradeCommand: RefreshRemoteTools first; with a tool: resolve HEAD, find the installed step (DisambiguateByCurrentDirectory), PinnedVersion=null, LastVersionUsed=head, Save, \"Upgraded x: old -> HEAD (v, unpinned \u2014 will track latest)\"; not installed => informational message; without a tool: UpgradeAllTools. D17: this is the only path that clears PinnedVersion - it calls ProjectToolFreshness.Apply(project, clearPins: true). The automatic build-time gate passes false and leaves pins alone. A tool_urls.json override for the tool wins over HEAD at run time, so it is reported with upgrade-override-warning and the \"will track latest\" claim is not printed.",
         "DispositionReason": "Core.",
         "Description": "Unpin a tool so it tracks HEAD.",
         "Tier": "secondary",
@@ -1570,7 +1570,7 @@
         "Disposition": "keep",
         "IsCommand": true,
         "ConsumesNextArgAsTool": true,
-        "HandlerNotes": "RefreshRemoteTools then UpgradeAllTools: per step (skipping -exec/-execute) resolve HEAD; \"SKIP\"/\"OK\"/\"UP\" lines; Save; summary \"Upgraded N tool(s)[, skipped M].\"",
+        "HandlerNotes": "RefreshRemoteTools then UpgradeAllTools: per step (skipping -exec/-execute) resolve HEAD; \"SKIP\"/\"OK\"/\"UP\" lines; Save; summary \"Upgraded N tool(s)[, skipped M].\" Every step whose tool has a tool_urls.json override also gets a red OVERRIDE line and is counted in the summary.",
         "DispositionReason": "Core.",
         "Description": "Unpin every tool.",
         "Tier": "secondary",
@@ -2352,7 +2352,7 @@
         "LifecycleStateId": "S17-wait",
         "Phase": "transpile-request",
         "SortOrder": 17,
-        "Entry": "waitForCook task polls result every 500 ms; spinner after 15 s; Wait(waitTimeout); null => Exception \"Timed out waiting for cook\".",
+        "Entry": "waitForCook task polls result every 500 ms; spinner after 15 s; Wait(waitTimeout); null => Exception \"Timed out waiting for cook\". A connection-level failure (DNS, refused, network unreachable, TLS) skips this wait entirely and fails at once with the unreachable message, because a tool that never accepted a connection cannot answer by being waited on.",
         "NewHome": "Transpile/TranspileClient.cs",
         "Disposition": "keep-modified",
         "Description": ""
@@ -2406,7 +2406,7 @@
         "LifecycleStateId": "S23-save-zfs",
         "Phase": "output-apply",
         "SortOrder": 23,
-        "Entry": "Write .effortless/<rel>/<toolKey>.zfs = gzip(xml); with -debug also <toolKey>.xml and a DEBUG line.",
+        "Entry": "Write .effortless/<rel>/<toolKey>.zfs = gzip(xml); every Never entry is first stamped CleanIfUnchanged=true, except one at an input file's own path, which gets SkipClean=true instead; with -debug also <toolKey>.xml and a DEBUG line.",
         "NewHome": "FileSets/ZfsLedger.cs",
         "Disposition": "keep",
         "Description": "Directory created hidden."
@@ -2532,10 +2532,10 @@
         "LifecycleStateId": "C03-clean-file-rules",
         "Phase": "clean",
         "SortOrder": 3,
-        "Entry": "Per FileSetFile in the ledger: SkipClean=true => skip; compute neverOverwrite (AlwaysOverwrite / OverwriteMode); files that are NOT never-overwrite are deleted; never-overwrite files are always preserved (hand-edited); then CleanEmptyFolders under cwd when requested.",
+        "Entry": "Per FileSetFile in the ledger: SkipClean=true => skip; compute neverOverwrite (AlwaysOverwrite / OverwriteMode); files that are NOT never-overwrite are deleted; on an explicit clean (clean, -purge, uninstall, a tool run with -clean) a never-overwrite file stamped CleanIfUnchanged=true is deleted while its content still matches the ledger, and preserved once hand-edited; an unstamped never-overwrite file, and every never-overwrite file in a build's pre-write clean, is preserved; then CleanEmptyFolders under cwd when requested.",
         "NewHome": "FileSets/FileSetCleaner.cs",
-        "Disposition": "keep",
-        "Description": "Content comparison is computed but does not gate deletion."
+        "Disposition": "keep-modified",
+        "Description": "Untouched Never scaffolds (EF partials, postgres scripts) used to survive every clean. The stamp is opt-in so a ledger written before it existed, which may hold the user's own rulebook as a plain Never entry, never deletes it."
       },
       {
         "LifecycleStateId": "C04-purge",
@@ -2869,8 +2869,8 @@
         "StateTransitionId": "E30",
         "FromState": "S17-wait",
         "ToState": "S24-finally",
-        "Condition": "waitTimeout elapsed with no result",
-        "Description": "\"Timed out waiting for cook\" exception path => -1."
+        "Condition": "waitTimeout elapsed with no result, or the tool was never reachable",
+        "Description": "\"Timed out waiting for cook\" exception path => -1. An unreachable tool takes this edge as soon as its retries are spent, without consuming the rest of waitTimeout, and carries \"Could not reach the transpiler at {url} ({failure}); it never answered.\" instead."
       },
       {
         "StateTransitionId": "E31",
@@ -3987,7 +3987,7 @@
         "ToolResolutionRuleId": "R11-refresh-on-timeout",
         "Precedence": 11,
         "Source": "TranspileClient connection failure",
-        "Condition": "a CATALOG-resolved tool's POST fails at the connection level before any response: DNS resolution failure, connection refused (after the RetryRules connection retries), TLS handshake failure, or no response bytes within waitTimeout. A tool that answers (even 4xx/5xx/502) is NOT a complete timeout; RetryRules own that.",
+        "Condition": "a CATALOG-resolved tool's POST fails at the connection level before any response: DNS resolution failure, connection refused (after the RetryRules connection retries), network unreachable, TLS handshake failure, or no response bytes within waitTimeout. A tool that answers (even 4xx/5xx/502) is NOT a complete timeout; RetryRules own that.",
         "Result": "Force ONE catalog refresh ignoring the 24h stamp (same bridge call as R0; failure is fatal, no stale fallback). Re-resolve the tool: if its URL changed print \"Tool <name> moved; retrying against <new-url>\" and retry the POST once; if unchanged, or the retry fails the same way, fail the step with the existing message plus \"<name> is offline at <url>; catalog age <age> (fetched <utc>)\". Bound: at most one forced refresh per CLI invocation for one-shot commands no matter how many steps time out; long-running modes (buildOnTrigger, serve) at most once per 10 minutes. Excluded: -targetUrl, bare URLs, tool_urls.json overrides, local tools (they never consult the catalog, IsCatalogResolved=false).",
         "VersionLabel": "",
         "Disposition": "keep-modified",
@@ -4070,11 +4070,11 @@
       {
         "RetryRuleId": "host-not-found",
         "Trigger": "HttpRequestException with SocketError.HostNotFound or message contains \"No such host\"",
-        "Action": "retry",
-        "DelayMs": 6000,
-        "MaxAttempts": 10,
-        "Message": "[cli] [{tool}] Host not found: {host}. Retrying in 6 seconds... (attempt {n}/10)",
-        "Description": "Uses the shared retry budget."
+        "Action": "abort",
+        "DelayMs": 0,
+        "MaxAttempts": 1,
+        "Message": "[cli] [{tool}] Host not found: {host}. Not retrying: the host does not exist.",
+        "Description": "A host that does not resolve has no workload to boot up, so it fails on the first attempt instead of spending the retry budget; a catalog-resolved tool still gets the R11 refresh-and-retry-once."
       },
       {
         "RetryRuleId": "connection-refused",
@@ -4083,7 +4083,7 @@
         "DelayMs": 6000,
         "MaxAttempts": 3,
         "Message": "ERROR: Connection refused 3 times for: {url} / The transpiler URL may be incorrect or the service is not deployed. / If this tool has no PinnedVersion, add one to your project config or use -id to specify a version.",
-        "Description": "After the third refusal the request returns without a result; the outer wait then times out unless waitTimeout is short."
+        "Description": "After the third refusal the request returns without a result and the step fails immediately with the unreachable message; it does not sit out the remaining waitTimeout."
       },
       {
         "RetryRuleId": "connection-reset-or-unreachable",
@@ -4137,7 +4137,7 @@
         "DelayMs": 0,
         "MaxAttempts": 10,
         "Message": "ERROR: Failed to connect to transpiler after 10 attempts: {url}",
-        "Description": "Red."
+        "Description": "Red. The step then fails at once with the unreachable message rather than waiting out the rest of waitTimeout."
       },
       {
         "RetryRuleId": "non-success-status",
@@ -5040,7 +5040,7 @@
         "Path": "<root>/.effortless/<RelativePath>/<toolKey>.zfs",
         "Scope": "project-hidden",
         "Format": "gzip-xml",
-        "Purpose": "GZip of the FileSet XML a step last produced (minus self-source entries).",
+        "Purpose": "GZip of the FileSet XML a step last produced; Never entries carry the CLI's CleanIfUnchanged stamp, self-source entries carry SkipClean=true.",
         "ReadBy": "clean, uninstall prompt, purge",
         "WrittenBy": "SavePreviousFileSet after every successful transpile",
         "IsSecret": false,
@@ -6172,7 +6172,7 @@
         "Stream": "stdout",
         "IsGoldenForTests": true,
         "Disposition": "keep-modified",
-        "Description": "Followed by red \"ERROR: {message}\" + stack per inner exception, and the SSL HINT block when the message mentions \"SSL connection could not be established\"."
+        "Description": "Not printed when the tool never answered (DNS failure, connection refused, TLS failure, no response): that failure prints only the red \"ERROR: {message}\" chain, because an unreachable tool received no input. {name} is the tool name as typed, never the sanitized URL. Followed by red \"ERROR: {message}\" + stack per inner exception, and the SSL HINT block when the message mentions \"SSL connection could not be established\"."
       },
       {
         "UserMessageId": "version-not-found",
@@ -6312,7 +6312,7 @@
         "Stream": "stdout",
         "IsGoldenForTests": true,
         "Disposition": "keep",
-        "Description": ""
+        "Description": "Followed by upgrade-override-warning when ~/.effortless/tool_urls.json overrides the tool."
       },
       {
         "UserMessageId": "upgrade-not-used",
@@ -6322,17 +6322,27 @@
         "Stream": "stdout",
         "IsGoldenForTests": true,
         "Disposition": "keep",
-        "Description": ""
+        "Description": "When ~/.effortless/tool_urls.json overrides the tool, the \"will track latest\" line is replaced by upgrade-override-warning."
       },
       {
         "UserMessageId": "upgrade-all-lines",
-        "Template": "  SKIP {tool} \u2014 not found in remote tools index | \"  OK   {tool} \u2014 already unpinned at HEAD ({v})\" | \"  UP   {tool}: {old} \u2192 HEAD ({v}, unpinned)\" | \"\\nUpgraded {n} tool(s)[, skipped {m}].\"",
+        "Template": "  SKIP {tool} \u2014 not found in remote tools index | \"  OK   {tool} \u2014 already unpinned at HEAD ({v})\" | \"  UP   {tool}: {old} \u2192 HEAD ({v}, unpinned)\" | \"  OVERRIDE {tool} \u2014 runs {url} from ~/.effortless/tool_urls.json, NOT HEAD; run 'effortless -removeToolUrl {tool}' to use HEAD\" | \"\\nUpgraded {n} tool(s)[, skipped {m}][, {k} overridden by tool_urls.json].\"",
         "Color": "default",
         "Trigger": "-upgradeAll",
         "Stream": "stdout",
         "IsGoldenForTests": true,
         "Disposition": "keep",
-        "Description": ""
+        "Description": "The red OVERRIDE line follows the OK/UP line of any step whose tool has a tool_urls.json override, because that override (not HEAD) is what the step will actually run."
+      },
+      {
+        "UserMessageId": "upgrade-override-warning",
+        "Template": "WARNING: '{tool}' will NOT run HEAD ({v}): ~/.effortless/tool_urls.json overrides it with {url}. Run 'effortless -removeToolUrl {tool}' to use HEAD.",
+        "Color": "red",
+        "Trigger": "-upgrade <tool> when tool_urls.json overrides the tool",
+        "Stream": "stdout",
+        "IsGoldenForTests": true,
+        "Disposition": "keep",
+        "Description": "A tool_urls.json override beats the catalog (R4/R5), so -upgrade must never claim the tool tracks HEAD while one is in place."
       },
       {
         "UserMessageId": "latest-applied",
@@ -6388,11 +6398,21 @@
         "UserMessageId": "timeout-cook",
         "Template": "Timed out waiting for cook",
         "Color": "red (inside the error box)",
-        "Trigger": "no result within waitTimeout",
+        "Trigger": "no result within waitTimeout from a tool that WAS reachable",
         "Stream": "stdout",
         "IsGoldenForTests": true,
         "Disposition": "keep",
-        "Description": ""
+        "Description": "Reserved for a tool that answered or at least accepted a connection. A tool that was never reachable reports transpiler-unreachable instead, so this message no longer hides a dead URL behind a cook that never started."
+      },
+      {
+        "UserMessageId": "transpiler-unreachable",
+        "Template": "Could not reach the transpiler at {url} ({failure}); it never answered.",
+        "Color": "red (inside the error box)",
+        "Trigger": "the POST never got a connection: DNS resolution failure, connection refused, network unreachable, or TLS handshake failure",
+        "Stream": "stdout",
+        "IsGoldenForTests": true,
+        "Disposition": "keep-modified",
+        "Description": "{failure} uses the same wording as the R11 hint (TranspileConnectionFailureText.Describe). Printed as soon as the retries are spent, so a dead URL fails in retry time rather than after the whole waitTimeout."
       },
       {
         "UserMessageId": "async-polling",
@@ -6416,7 +6436,7 @@
       },
       {
         "UserMessageId": "retry-lines",
-        "Template": "[cli] [{tool}] Host not found: {host}. Retrying in 6 seconds... (attempt {n}/10) | [cli] [{tool}] Connection error ({code}). Retrying in 6 seconds... | [cli] [{tool}] SSL connection error. Retrying in 6 seconds... | [cli] [{tool}] Remote transpiler not ready ({status}). Retrying... | [cli] [{tool}] Remote transpiler SSL error. Retrying in 6 seconds...",
+        "Template": "[cli] [{tool}] Host not found: {host}. Not retrying: the host does not exist. | [cli] [{tool}] Connection error ({code}). Retrying in 6 seconds... | [cli] [{tool}] SSL connection error. Retrying in 6 seconds... | [cli] [{tool}] Remote transpiler not ready ({status}). Retrying... | [cli] [{tool}] Remote transpiler SSL error. Retrying in 6 seconds...",
         "Color": "default/yellow",
         "Trigger": "RetryRules",
         "Stream": "stdout",
@@ -6623,6 +6643,16 @@
         "IsGoldenForTests": true,
         "Disposition": "keep-modified",
         "Description": "Printed before the existing transpiler error so the operator can tell a stale catalog from a dead workload."
+      },
+      {
+        "UserMessageId": "tool-offline-user-set",
+        "Template": "[cli] {name} is offline at {url}. That URL is your tool_urls.json override, not the catalog[ (catalog version {v})]. Run 'effortless -removeToolUrl {name}' to use the catalog.",
+        "Color": "red",
+        "Trigger": "complete timeout of a [user-set] tool_urls.json override",
+        "Stream": "stdout",
+        "IsGoldenForTests": true,
+        "Disposition": "keep",
+        "Description": "Replaces tool-offline-catalog-age for an override: the catalog age is irrelevant because the catalog did not choose this URL."
       },
       {
         "UserMessageId": "info-catalog-age",
@@ -9440,9 +9470,9 @@
         "Suite": "e2e-clean",
         "PrimaryOption": "clean",
         "Title": "clean removes generated files per the ledger",
-        "Given": "built project: out.txt (Always), keep.txt (Never), skip.txt (SkipClean), bin.dat (ZippedBinary Always), empty subdir created by output",
+        "Given": "built project: out.txt (Always), untouched.txt (Never, unedited), keep.txt (Never, hand-edited after the build), skip.txt (SkipClean), bin.dat (ZippedBinary Always), empty subdir created by output",
         "When": "effortless clean ; -clean ; -c",
-        "Then": "out.txt and bin.dat deleted with \"[cli] Cleaning <abs>\"; keep.txt and skip.txt remain; .zfs deleted; empty output dir removed; cwd not deleted; exit 0",
+        "Then": "out.txt, bin.dat and untouched.txt deleted with \"[cli] Cleaning <abs>\"; keep.txt and skip.txt remain; .zfs deleted; empty output dir removed; cwd not deleted; exit 0",
         "Priority": "P0",
         "Interactive": false,
         "Slow": false,
@@ -9778,7 +9808,7 @@
         "Title": "input==output entries are stripped from the ledger",
         "Given": "tool writes back in.txt (Always, the same path it was given as input) and generates out.txt",
         "When": "effortless echo -i in.txt",
-        "Then": "in.txt is an in-place upsert: it is downgraded to Never and kept out of the ledger, so it survives the next run; out.txt is ledgered as generated and the next run cleans it",
+        "Then": "in.txt is an in-place upsert: it is downgraded to Never and ledgered with SkipClean=true, so it survives the next run and every clean; out.txt is ledgered as generated and the next run cleans it",
         "Priority": "P1",
         "Interactive": false,
         "Slow": false,
@@ -9862,7 +9892,7 @@
         "Title": "SSL handshake exception retried with SSL-specific message",
         "Given": "Exception message contains \"SSL connection could not be established\"",
         "When": "effortless echo -i in.txt",
-        "Then": "SSL connection error. Retrying in 6 seconds... (attempt 1/10); eventually times out (no HINT block exists in the rebuilt code)",
+        "Then": "SSL connection error. Retrying in 6 seconds... (attempt 1/10); then the box reports the TLS handshake failure as unreachable (no HINT block exists in the rebuilt code)",
         "Priority": "P2",
         "Interactive": false,
         "Slow": true,
@@ -9943,13 +9973,13 @@
         "TestCaseId": "tx-retry-host-not-found",
         "Suite": "e2e-transpile",
         "PrimaryOption": "targetUrl",
-        "Title": "unknown host retries then times out",
+        "Title": "unknown host fails on the first attempt without retrying",
         "Given": "tool_urls ghost=http://nonexistent.invalid/",
         "When": "effortless ghost -i in.txt -w 8000",
-        "Then": "\"Host not found: nonexistent.invalid. Retrying in 6 seconds...\" then box with \"Timed out waiting for cook\"; exit -1",
+        "Then": "\"Host not found: nonexistent.invalid. Not retrying: the host does not exist.\" with no \"Retrying in 6 seconds\" line, then \"Could not reach the transpiler at http://nonexistent.invalid/ (DNS resolution failure)\", no TRANSPILER ERROR box, no cook-timeout line; exit -1",
         "Priority": "P1",
         "Interactive": false,
-        "Slow": true,
+        "Slow": false,
         "Status": "green",
         "Description": ""
       },
@@ -9960,12 +9990,26 @@
         "Title": "connection refused aborts after 3",
         "Given": "tool_urls dead=http://127.0.0.1:1/",
         "When": "effortless dead -i in.txt -w 30000",
-        "Then": "two \"Connection error (ConnectionRefused)\" lines then the \"Connection refused 3 times\" block; then timeout box; exit -1",
+        "Then": "two \"Connection error (ConnectionRefused)\" lines then the \"Connection refused 3 times\" block; then the box with \"Could not reach the transpiler at http://127.0.0.1:1/ (connection refused)\" and no cook-timeout line; exit -1",
         "Priority": "P1",
         "Interactive": false,
         "Slow": true,
         "Status": "green",
         "Description": ""
+      },
+      {
+        "TestCaseId": "tx-unreachable-fails-fast",
+        "Suite": "e2e-transpile",
+        "PrimaryOption": "targetUrl",
+        "Title": "an unreachable tool fails in retry time, not after the whole waitTimeout",
+        "Given": "tool_urls dead=http://127.0.0.1:1/ and a deliberately long -w",
+        "When": "effortless dead -i in.txt -w 120000",
+        "Then": "the run ends well inside the 120 s budget with \"Could not reach the transpiler at http://127.0.0.1:1/ (connection refused)\"; no \"Timed out waiting for cook\"; exit -1",
+        "Priority": "P1",
+        "Interactive": false,
+        "Slow": true,
+        "Status": "green",
+        "Description": "Guards the defect where a dead URL spun the boot spinner through the rest of waitTimeout and then blamed a cook that never started."
       },
       {
         "TestCaseId": "tx-timeout",
@@ -10612,6 +10656,20 @@
         "Description": ""
       },
       {
+        "TestCaseId": "res-upgrade-override-warning",
+        "Suite": "e2e-resolution",
+        "PrimaryOption": "upgrade",
+        "Title": "upgrade warns when tool_urls.json overrides the tool",
+        "Given": "index has to-uppercase; tool_urls to-uppercase=<override url>; project does not use it",
+        "When": "effortless upgrade to-uppercase",
+        "Then": "\"WARNING: 'to-uppercase' will NOT run HEAD (<head>): ~/.effortless/tool_urls.json overrides it with <override url>. Run 'effortless -removeToolUrl to-uppercase' to use HEAD.\"; no \"will track latest\" line; exit 0",
+        "Priority": "P0",
+        "Interactive": false,
+        "Slow": false,
+        "Status": "green",
+        "Description": ""
+      },
+      {
         "TestCaseId": "res-upgrade-no-project",
         "Suite": "e2e-resolution",
         "PrimaryOption": "upgrade",
@@ -10640,6 +10698,20 @@
         "Description": ""
       },
       {
+        "TestCaseId": "res-upgrade-all-override",
+        "Suite": "e2e-resolution",
+        "PrimaryOption": "upgradeAll",
+        "Title": "upgradeAll flags steps whose tool is overridden",
+        "Given": "project step to-uppercase at HEAD; tool_urls to-uppercase=<override url>",
+        "When": "effortless -upgradeAll",
+        "Then": "\"  OK   to-uppercase \u2014 already unpinned at HEAD (<head>)\" then \"  OVERRIDE to-uppercase \u2014 runs <override url> from ~/.effortless/tool_urls.json, NOT HEAD\"; summary \"Upgraded 0 tool(s), 1 overridden by tool_urls.json.\"",
+        "Priority": "P0",
+        "Interactive": false,
+        "Slow": false,
+        "Status": "green",
+        "Description": ""
+      },
+      {
         "TestCaseId": "res-upgrade-cwd-disambiguation",
         "Suite": "e2e-resolution",
         "PrimaryOption": "upgrade",
@@ -10661,6 +10733,20 @@
         "Given": "index has to-uppercase; tool_urls to-uppercase=<mock alt url>",
         "When": "effortless to-uppercase -i in.txt",
         "Then": "POST to alt url; label \"to-uppercase [user-set]\"; LastVersionUsed still the index head key",
+        "Priority": "P0",
+        "Interactive": false,
+        "Slow": false,
+        "Status": "green",
+        "Description": ""
+      },
+      {
+        "TestCaseId": "res-user-set-offline",
+        "Suite": "e2e-resolution",
+        "PrimaryOption": "setToolUrl",
+        "Title": "a dead tool_urls override is reported as the override, not the catalog",
+        "Given": "index has to-uppercase; tool_urls to-uppercase=<closed port url>",
+        "When": "effortless to-uppercase -i in.txt",
+        "Then": "\"to-uppercase is offline at <url>. That URL is your tool_urls.json override, not the catalog\" and \"Run 'effortless -removeToolUrl to-uppercase' to use the catalog.\"; no \"catalog age\", no catalog refresh, no TRANSPILER ERROR box; exit non-zero",
         "Priority": "P0",
         "Interactive": false,
         "Slow": false,
@@ -11219,8 +11305,8 @@
         "PrimaryOption": "clean",
         "Title": "CleanFileSet rules",
         "Given": "temp dir",
-        "When": "ledger with Always/Never/SkipClean entries",
-        "Then": "only Always deleted; empty dirs removed when requested",
+        "When": "ledger with Always, Never (stamped unedited, stamped edited, unstamped) and SkipClean entries",
+        "Then": "Always and the stamped unedited Never deleted; edited, unstamped and SkipClean kept; empty dirs removed when requested",
         "Priority": "P0",
         "Interactive": false,
         "Slow": false,
@@ -11362,6 +11448,48 @@
         "When": "every CliOptions.BarewordForms entry",
         "Then": "maps to the right option; lowercase-only quirks reproduced",
         "Priority": "P0",
+        "Interactive": false,
+        "Slow": false,
+        "Status": "green",
+        "Description": ""
+      },
+      {
+        "TestCaseId": "unit-onsave-default-file",
+        "Suite": "unit-core",
+        "PrimaryOption": "compileOnSave",
+        "Title": "-compileOnSave and -buildOnSave default to the project rulebook",
+        "Given": "no file named after the flag",
+        "When": "effortless -compileOnSave ; effortless -buildOnSave ; effortless -cos ; effortless -bos",
+        "Then": "the watched file is effortless-rulebook/effortless-rulebook.json; no parse error",
+        "Priority": "P1",
+        "Interactive": false,
+        "Slow": false,
+        "Status": "green",
+        "Description": ""
+      },
+      {
+        "TestCaseId": "unit-onsave-input-form",
+        "Suite": "unit-core",
+        "PrimaryOption": "compileOnSave",
+        "Title": "-i names the watched file just like the positional form",
+        "Given": "a file supplied as an input rather than positionally",
+        "When": "effortless -compileOnSave -i rules.json",
+        "Then": "watches rules.json, identical to effortless -compileOnSave rules.json; -input is not left set",
+        "Priority": "P1",
+        "Interactive": false,
+        "Slow": false,
+        "Status": "green",
+        "Description": ""
+      },
+      {
+        "TestCaseId": "unit-onsave-barewords",
+        "Suite": "unit-core",
+        "PrimaryOption": "compileOnSave",
+        "Title": "The save watchers are reserved words without the dash",
+        "Given": "",
+        "When": "effortless compileOnSave [file] ; effortless buildOnSave [file] ; cos ; bos",
+        "Then": "selects the same option as the dashed flag, with the same default and file handling",
+        "Priority": "P1",
         "Interactive": false,
         "Slow": false,
         "Status": "green",

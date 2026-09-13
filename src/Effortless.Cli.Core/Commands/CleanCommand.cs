@@ -20,7 +20,7 @@ public sealed class CleanCommand
             if (ledger.Exists)
             {
                 File.ReadAllBytes(ledger.FullName)
-                    .CleanZippedFileSet(options.debug);
+                    .CleanZippedFileSet(options.debug, deleteUnchangedNever: true);
                 if (!options.preserveZFS)
                 {
                     ledger.Delete();

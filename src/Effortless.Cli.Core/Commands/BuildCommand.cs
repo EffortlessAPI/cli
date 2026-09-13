@@ -108,6 +108,25 @@ public sealed class BuildCommand
 
         if (!fileInfo.Exists)
         {
+            // The default is a convenience, so a project that does not have
+            // that rulebook has to be told to name its own file rather than
+            // being shown a path it never typed.
+            if (string.Equals(
+                    fileToWatch,
+                    CliArgumentParser.DefaultWatchedFile,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                var flag = compileOnly ? "-compileOnSave" : "-buildOnSave";
+                CliLog.LogLine(
+                    $"No file to watch: '{CliArgumentParser.DefaultWatchedFile}'"
+                    + " does not exist in this project.",
+                    ConsoleColor.Red);
+                CliLog.LogLine(
+                    $"Name the file to watch: effortless {flag} <file>",
+                    ConsoleColor.Yellow);
+                return 1;
+            }
+
             CliLog.LogLine(
                 $"Cannot watch '{fileInfo.FullName}': the file does not exist.",
                 ConsoleColor.Red);

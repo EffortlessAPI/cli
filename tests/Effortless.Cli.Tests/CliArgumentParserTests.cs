@@ -172,4 +172,90 @@ public class CliArgumentParserTests
             "app123",
             trigger.Options.buildOnTrigger);
     }
+
+    [Theory(DisplayName = "unit-onsave-default-file: the save watchers default to the project rulebook")]
+    [InlineData("-compileOnSave")]
+    [InlineData("-cos")]
+    [InlineData("compileOnSave")]
+    [InlineData("cos")]
+    public void CompileOnSaveWithoutAFileWatchesTheProjectRulebook(string form)
+    {
+        var invocation = new CliArgumentParser().Parse(new[] { form });
+
+        Assert.False(invocation.HasErrors, invocation.ErrorText);
+        Assert.Equal(
+            CliArgumentParser.DefaultWatchedFile,
+            invocation.Options.compileOnSave);
+    }
+
+    [Theory(DisplayName = "unit-onsave-default-file: buildOnSave shares the default")]
+    [InlineData("-buildOnSave")]
+    [InlineData("-bos")]
+    [InlineData("buildOnSave")]
+    [InlineData("bos")]
+    public void BuildOnSaveWithoutAFileWatchesTheProjectRulebook(string form)
+    {
+        var invocation = new CliArgumentParser().Parse(new[] { form });
+
+        Assert.False(invocation.HasErrors, invocation.ErrorText);
+        Assert.Equal(
+            CliArgumentParser.DefaultWatchedFile,
+            invocation.Options.buildOnSave);
+    }
+
+    [Fact(DisplayName = "unit-onsave-input-form: -i names the watched file")]
+    public void SaveWatcherTakesItsFileFromAnInputArgument()
+    {
+        var viaInput = new CliArgumentParser()
+            .Parse(new[] { "-compileOnSave", "-i", "rules.json" });
+        var positional = new CliArgumentParser()
+            .Parse(new[] { "-compileOnSave", "rules.json" });
+
+        Assert.False(viaInput.HasErrors, viaInput.ErrorText);
+        Assert.Equal("rules.json", viaInput.Options.compileOnSave);
+        Assert.Equal(
+            positional.Options.compileOnSave,
+            viaInput.Options.compileOnSave);
+
+        // The input was the file to watch, not an input to pass on to a build.
+        Assert.Empty(viaInput.Options.input);
+
+        var build = new CliArgumentParser()
+            .Parse(new[] { "-buildOnSave", "-input", "rules.json" });
+        Assert.False(build.HasErrors, build.ErrorText);
+        Assert.Equal("rules.json", build.Options.buildOnSave);
+        Assert.Empty(build.Options.input);
+    }
+
+    [Fact(DisplayName = "unit-onsave-input-form: a named file leaves inputs alone")]
+    public void APositionalWatchedFileLeavesInputsAlone()
+    {
+        var invocation = new CliArgumentParser()
+            .Parse(new[] { "-compileOnSave", "rules.json", "-i", "other.json" });
+
+        Assert.False(invocation.HasErrors, invocation.ErrorText);
+        Assert.Equal("rules.json", invocation.Options.compileOnSave);
+        Assert.Equal(new[] { "other.json" }, invocation.Options.input);
+    }
+
+    [Fact(DisplayName = "unit-onsave-barewords: the save watchers are reserved without the dash")]
+    public void SaveWatcherBarewordsMatchTheDashedForms()
+    {
+        var compile = new CliArgumentParser()
+            .Parse(new[] { "compileOnSave", "rules.json" });
+        var build = new CliArgumentParser()
+            .Parse(new[] { "buildOnSave", "rules.json" });
+
+        Assert.False(compile.HasErrors, compile.ErrorText);
+        Assert.Equal("rules.json", compile.Options.compileOnSave);
+        Assert.Empty(compile.RemainingArguments);
+
+        Assert.False(build.HasErrors, build.ErrorText);
+        Assert.Equal("rules.json", build.Options.buildOnSave);
+        Assert.Empty(build.RemainingArguments);
+
+        // The bareword is a reserved word, so it never reads as a tool name.
+        Assert.True(string.IsNullOrEmpty(compile.Transpiler));
+        Assert.True(string.IsNullOrEmpty(build.Transpiler));
+    }
 }

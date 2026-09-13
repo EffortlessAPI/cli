@@ -30,8 +30,38 @@ public enum TranspileConnectionFailure
     None,
     HostNotFound,
     ConnectionRefused,
+    NetworkUnreachable,
     TlsHandshake,
     NoResponseWithinTimeout,
+}
+
+/// <summary>
+/// The one wording for a connection-level failure, shared by the transpile
+/// error text and the R11 catalog-refresh hint so the two never diverge.
+/// </summary>
+public static class TranspileConnectionFailureText
+{
+    public static string Describe(TranspileConnectionFailure failure) =>
+        failure switch
+        {
+            TranspileConnectionFailure.HostNotFound => "DNS resolution failure",
+            TranspileConnectionFailure.ConnectionRefused => "connection refused",
+            TranspileConnectionFailure.NetworkUnreachable => "network unreachable",
+            TranspileConnectionFailure.TlsHandshake => "TLS handshake failure",
+            TranspileConnectionFailure.NoResponseWithinTimeout =>
+                "no response within waitTimeout",
+            _ => "a connection failure",
+        };
+
+    /// <summary>
+    /// True when nothing ever accepted the connection. Waiting longer cannot
+    /// turn such a failure into a result, so the step fails immediately.
+    /// </summary>
+    public static bool IsUnreachable(TranspileConnectionFailure failure) =>
+        failure is TranspileConnectionFailure.HostNotFound
+            or TranspileConnectionFailure.ConnectionRefused
+            or TranspileConnectionFailure.NetworkUnreachable
+            or TranspileConnectionFailure.TlsHandshake;
 }
 
 public sealed class TranspileClientResult
@@ -219,7 +249,8 @@ public sealed class TranspileClient : IDisposable
         var targetUrl = new Uri(invocation.TargetUrl, UriKind.Absolute);
         var payload = BuildPayload(invocation);
         var startedAt = _timeProvider.GetTimestamp();
-        var spinner = new BootSpinner(invocation.Transpiler);
+        var spinner = new BootSpinner(
+            invocation.RawTranspilerArg ?? invocation.Transpiler);
         _lastConnectionFailure = TranspileConnectionFailure.None;
 
         if (invocation.Options.debug)
@@ -237,7 +268,15 @@ public sealed class TranspileClient : IDisposable
                 startedAt,
                 spinner,
                 cancellationToken);
-            if (responsePayload is null)
+
+            // A tool that never accepted a connection does not start answering
+            // because the CLI waited longer: once the retries are spent, fail
+            // now instead of spinning the boot spinner through the rest of
+            // waitTimeout and then blaming a cook that never started. Only a
+            // reachable tool that owes a result is still worth waiting for.
+            if (responsePayload is null
+                && !TranspileConnectionFailureText.IsUnreachable(
+                    _lastConnectionFailure))
             {
                 await WaitForCookTimeoutAsync(
                     invocation.Options.waitTimeout,
@@ -251,8 +290,7 @@ public sealed class TranspileClient : IDisposable
             spinner.Clear();
         }
 
-        responsePayload ??= FailurePayload(
-            new TimeoutException("Timed out waiting for cook"));
+        responsePayload ??= FailurePayload(NoResultException(targetUrl));
 
         FixResponseNames(responsePayload, invocation, targetUrl);
         PrintLogsAndPromoteErrors(responsePayload, invocation);
@@ -275,6 +313,18 @@ public sealed class TranspileClient : IDisposable
             _httpClient.Dispose();
         }
     }
+
+    /// <summary>
+    /// The failure a run ends with when no payload ever came back: an
+    /// unreachable tool reports the connection failure that stopped it, and
+    /// only a tool that could be reached reports a cook timeout.
+    /// </summary>
+    private Exception NoResultException(Uri targetUrl) =>
+        TranspileConnectionFailureText.IsUnreachable(_lastConnectionFailure)
+            ? new Exception(
+                $"Could not reach the transpiler at {targetUrl} "
+                + $"({TranspileConnectionFailureText.Describe(_lastConnectionFailure)}); it never answered.")
+            : new TimeoutException("Timed out waiting for cook");
 
     private async Task<TranspilePayload> SendAndParseAsync(
         CliInvocation invocation,
@@ -785,7 +835,7 @@ public sealed class TranspileClient : IDisposable
             TranspileRetryKind.ConnectionRefused =>
                 TranspileConnectionFailure.ConnectionRefused,
             TranspileRetryKind.ConnectionResetOrUnreachable =>
-                TranspileConnectionFailure.ConnectionRefused,
+                TranspileConnectionFailure.NetworkUnreachable,
             TranspileRetryKind.SslException =>
                 TranspileConnectionFailure.TlsHandshake,
             _ => TranspileConnectionFailure.None,

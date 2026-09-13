@@ -135,38 +135,46 @@ public sealed class FileSetTests
         Assert.Contains("without content nodes", exception.Message, StringComparison.Ordinal);
     }
 
-    [Fact(DisplayName = "unit-clean-fileset-rules: FileSet cleaner only removes Always entries")]
-    public void FileSetCleanerOnlyRemovesAlwaysEntries()
+    [Fact(DisplayName = "unit-clean-fileset-rules: FileSet cleaner removes Always entries and stamped Never entries still unchanged")]
+    public void FileSetCleanerRemovesAlwaysAndUnchangedStampedNeverEntries()
     {
         using var directory = new TestDirectory();
         Directory.CreateDirectory(directory.File("delete"));
         Directory.CreateDirectory(directory.File("keep"));
         Directory.CreateDirectory(directory.File("skip"));
         File.WriteAllText(directory.File("delete/always.txt"), "generated");
+        File.WriteAllText(directory.File("delete/untouched.txt"), "generated");
         File.WriteAllText(directory.File("keep/never.txt"), "edited");
+        File.WriteAllText(directory.File("keep/unstamped.txt"), "generated");
         File.WriteAllText(directory.File("skip/skip.txt"), "generated");
 
-        var ledger = new FileSet
-        {
-            FileSetFiles = new BindingList<FileSetFile>
+        var ledger = FileSetXml.ToXml(
+            new FileSet
             {
-                new() { RelativePath = "delete/always.txt", FileContents = "generated", AlwaysOverwrite = true },
-                new() { RelativePath = "keep/never.txt", FileContents = "generated", OverwriteMode = "Never" },
-                new()
+                FileSetFiles = new BindingList<FileSetFile>
                 {
-                    RelativePath = "skip/skip.txt",
-                    FileContents = "generated",
-                    AlwaysOverwrite = true,
-                    SkipClean = true,
+                    new() { RelativePath = "delete/always.txt", FileContents = "generated", AlwaysOverwrite = true },
+                    new() { RelativePath = "delete/untouched.txt", FileContents = "generated", OverwriteMode = "Never" },
+                    new() { RelativePath = "keep/never.txt", FileContents = "generated", OverwriteMode = "Never" },
+                    new() { RelativePath = "keep/unstamped.txt", FileContents = "generated", OverwriteMode = "Never" },
+                    new()
+                    {
+                        RelativePath = "skip/skip.txt",
+                        FileContents = "generated",
+                        AlwaysOverwrite = true,
+                        SkipClean = true,
+                    },
                 },
-            },
-        };
+            });
+
+        // keep/unstamped.txt stays unstamped: the shape of a ledger written before the stamp.
+        ledger = StampCleanIfUnchanged(ledger, "delete/untouched.txt", "keep/never.txt");
 
         var original = Environment.CurrentDirectory;
         try
         {
             Environment.CurrentDirectory = directory.Path;
-            FileSetCleaner.CleanFileSet(FileSetXml.ToXml(ledger), debug: false, deleteEmptyDirs: true);
+            FileSetCleaner.CleanFileSet(ledger, debug: false, deleteEmptyDirs: true, deleteUnchangedNever: true);
         }
         finally
         {
@@ -174,9 +182,91 @@ public sealed class FileSetTests
         }
 
         Assert.False(File.Exists(directory.File("delete/always.txt")));
+        Assert.False(File.Exists(directory.File("delete/untouched.txt")));
         Assert.False(Directory.Exists(directory.File("delete")));
         Assert.Equal("edited", File.ReadAllText(directory.File("keep/never.txt")));
+        Assert.Equal("generated", File.ReadAllText(directory.File("keep/unstamped.txt")));
         Assert.Equal("generated", File.ReadAllText(directory.File("skip/skip.txt")));
+    }
+
+    [Fact(DisplayName = "unit-clean-if-unchanged-stamp: Never outputs are stamped CleanIfUnchanged, a Never output at an input path gets SkipClean")]
+    public void MarkCleanIfUnchangedStampsGeneratedNeverFilesAndProtectsInputs()
+    {
+        using var directory = new TestDirectory();
+        var project = new EffortlessProject { RootPath = directory.Path };
+        var extractToDir = Path.Combine(directory.Path, "effortless-rulebook");
+        Directory.CreateDirectory(extractToDir);
+
+        var inputXml = FileSetXml.ToXml(
+            new FileSet
+            {
+                FileSetFiles = new BindingList<FileSetFile>
+                {
+                    new()
+                    {
+                        RelativePath = "effortless-rulebook.json",
+                        OriginalRelativePath = "effortless-rulebook/effortless-rulebook.json",
+                        ZippedFileContents = GZip.Zip("original"),
+                    },
+                },
+            });
+        var outputXml = FileSetXml.ToXml(
+            new FileSet
+            {
+                FileSetFiles = new BindingList<FileSetFile>
+                {
+                    new() { RelativePath = "effortless-rulebook.json", FileContents = "upserted", OverwriteMode = "Always" },
+                    new() { RelativePath = "scaffold.cs", FileContents = "partial", OverwriteMode = "Never" },
+                    new() { RelativePath = "generated.cs", FileContents = "base", AlwaysOverwrite = true },
+                    new() { RelativePath = "declared.txt", FileContents = "kept", OverwriteMode = "Never", SkipClean = true },
+                },
+            });
+
+        var downgraded = ZfsLedger.DowngradeInPlaceUpserts(project, inputXml, outputXml, extractToDir, out _);
+        var stamped = ZfsLedger.MarkCleanIfUnchanged(project, inputXml, downgraded, extractToDir);
+
+        var doc = new System.Xml.XmlDocument();
+        doc.LoadXml(stamped.Substring(stamped.IndexOf("<")));
+        string Child(string path, string name) =>
+            doc.SelectSingleNode($"//FileSetFile[RelativePath='{path}']/{name}")?.InnerText;
+
+        Assert.Equal("true", Child("effortless-rulebook.json", "SkipClean"));
+        Assert.Null(Child("effortless-rulebook.json", "CleanIfUnchanged"));
+        Assert.Equal("true", Child("scaffold.cs", "CleanIfUnchanged"));
+        Assert.Null(Child("generated.cs", "CleanIfUnchanged"));
+        Assert.Null(Child("declared.txt", "CleanIfUnchanged"));
+
+        // The unedited rulebook matches the ledger byte for byte and must still survive clean.
+        File.WriteAllText(Path.Combine(extractToDir, "effortless-rulebook.json"), "upserted");
+        File.WriteAllText(Path.Combine(extractToDir, "scaffold.cs"), "partial");
+        var original = Environment.CurrentDirectory;
+        try
+        {
+            Environment.CurrentDirectory = extractToDir;
+            FileSetCleaner.CleanFileSet(stamped, debug: false, deleteEmptyDirs: false, deleteUnchangedNever: true);
+        }
+        finally
+        {
+            Environment.CurrentDirectory = original;
+        }
+
+        Assert.Equal("upserted", File.ReadAllText(Path.Combine(extractToDir, "effortless-rulebook.json")));
+        Assert.False(File.Exists(Path.Combine(extractToDir, "scaffold.cs")));
+    }
+
+    private static string StampCleanIfUnchanged(string fileSetXml, params string[] relativePaths)
+    {
+        var doc = new System.Xml.XmlDocument();
+        doc.LoadXml(fileSetXml.Substring(fileSetXml.IndexOf("<")));
+        foreach (var path in relativePaths)
+        {
+            var entry = doc.SelectSingleNode($"//FileSetFile[RelativePath='{path}']");
+            var stamp = doc.CreateElement("CleanIfUnchanged");
+            stamp.InnerText = "true";
+            entry.AppendChild(stamp);
+        }
+
+        return doc.OuterXml;
     }
 
     [Fact(DisplayName = "unit-self-source-overwrite-guard: blocks an Always overwrite when the input file changed on disk mid-run")]

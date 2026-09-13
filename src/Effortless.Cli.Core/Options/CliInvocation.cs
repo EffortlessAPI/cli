@@ -70,6 +70,12 @@ public class CliInvocation
     public bool IsCatalogResolved { get; set; }
 
     /// <summary>
+    /// True when <see cref="TargetUrl"/> came from a tool_urls.json override
+    /// ([user-set]), so a dead URL is reported as the override, not the catalog.
+    /// </summary>
+    public bool IsUserSetToolUrl { get; set; }
+
+    /// <summary>
     /// R12: the project-local tool this invocation resolved to, if any. Local
     /// tools never consult the catalog and never pin.
     /// </summary>
