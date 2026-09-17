@@ -99,10 +99,28 @@ public sealed class ProjectToolFreshness
 
         var versions = _index.ListVersions(tool);
         return versions is not null
-            && versions.Versions.Any(version => string.Equals(
-                version.VersionKey,
-                pinnedVersion,
-                StringComparison.Ordinal));
+            && versions.Versions.Any(version => VersionKeysMatch(version.VersionKey, pinnedVersion));
+    }
+
+    // Catalog version keys are always "v"-prefixed (e.g. "v2026.09.13.2037"),
+    // but a pin is commonly written without one — the CLI's own `-pin` help
+    // example is bare ("effortless mytool -pin 2026.01.01.0000"), Pin() stores
+    // whatever the user typed with no normalization, and this repo's
+    // effortless.json has stored pins that way. An ordinal-only comparison
+    // here never matched a bare pin against the prefixed catalog key, so
+    // HasHonoredPin was always false and D17's clearPins:false guard (the
+    // automatic build-time gate) never engaged — a deliberately pinned step
+    // silently lost its pin on every single build. Confirmed against a real
+    // project: rulebook-to-postgres's pin was wiped twice in one session, each
+    // time reintroducing a genuine generator regression the pin existed to
+    // avoid. Tolerate an optional leading 'v'/'V' on either side; everything
+    // else still compares ordinally, so this does not loosen matching in any
+    // other way.
+    private static bool VersionKeysMatch(string catalogKey, string pinnedVersion)
+    {
+        static string StripV(string s) =>
+            !string.IsNullOrEmpty(s) && (s[0] == 'v' || s[0] == 'V') ? s[1..] : s;
+        return string.Equals(StripV(catalogKey), StripV(pinnedVersion), StringComparison.Ordinal);
     }
 
     private bool HasCustomUrl(string tool)
