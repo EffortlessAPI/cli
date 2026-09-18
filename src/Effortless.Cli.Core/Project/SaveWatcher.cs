@@ -154,7 +154,7 @@ public sealed class SaveWatcher
     /// Watches <paramref name="filePath"/> until cancelled, running
     /// <paramref name="runAsync"/> on each save under the rules above.
     /// </summary>
-    public async Task WatchAsync(
+    public Task WatchAsync(
         string filePath,
         Func<CancellationToken, Task> runAsync,
         CancellationToken cancellationToken = default)
@@ -166,39 +166,85 @@ public sealed class SaveWatcher
                 nameof(filePath));
         }
 
-        ArgumentNullException.ThrowIfNull(runAsync);
+        return WatchAsync(new[] { filePath }, runAsync, cancellationToken);
+    }
 
-        var fileInfo = new FileInfo(filePath);
-        if (!fileInfo.Exists)
+    /// <summary>
+    /// Watches every file in <paramref name="filePaths"/> until cancelled,
+    /// running <paramref name="runAsync"/> once per save under the rules
+    /// above, no matter which watched file changed. A save to any file counts
+    /// as one save through the same coalescing guard as the single-file
+    /// overload: a burst across several files during a run still produces at
+    /// most one follow-up run, not one per file.
+    /// </summary>
+    public async Task WatchAsync(
+        IReadOnlyList<string> filePaths,
+        Func<CancellationToken, Task> runAsync,
+        CancellationToken cancellationToken = default)
+    {
+        if (filePaths is null || filePaths.Count == 0)
         {
-            throw new FileNotFoundException(
-                $"Cannot watch '{fileInfo.FullName}': the file does not exist.",
-                fileInfo.FullName);
+            throw new ArgumentException(
+                "At least one file to watch is required.",
+                nameof(filePaths));
         }
 
-        var directory = fileInfo.Directory!.FullName;
-        using var watcher = new FileSystemWatcher(directory, fileInfo.Name)
-        {
-            NotifyFilter = NotifyFilters.LastWrite
-                | NotifyFilters.Size
-                | NotifyFilters.FileName,
-        };
+        ArgumentNullException.ThrowIfNull(runAsync);
 
-        // Editors frequently save by writing a temp file and renaming it over
-        // the target, which surfaces as Created/Renamed rather than Changed.
+        var fileInfos = filePaths.Select(path => new FileInfo(path)).ToList();
+        var missing = fileInfos.FirstOrDefault(f => !f.Exists);
+        if (missing is not null)
+        {
+            throw new FileNotFoundException(
+                $"Cannot watch '{missing.FullName}': the file does not exist.",
+                missing.FullName);
+        }
+
         var saved = new Channel();
-        watcher.Changed += (_, _) => saved.Signal();
-        watcher.Created += (_, _) => saved.Signal();
-        watcher.Renamed += (_, _) => saved.Signal();
-        watcher.EnableRaisingEvents = true;
+        var watchers = fileInfos
+            .Select(fileInfo =>
+            {
+                var fsWatcher = new FileSystemWatcher(
+                    fileInfo.Directory!.FullName,
+                    fileInfo.Name)
+                {
+                    NotifyFilter = NotifyFilters.LastWrite
+                        | NotifyFilters.Size
+                        | NotifyFilters.FileName,
+                };
 
-        _writeLine($"Watching {fileInfo.FullName}");
-        _writeLine("Save the file to recompile. Ctrl+C to stop.");
+                // Editors frequently save by writing a temp file and renaming
+                // it over the target, which surfaces as Created/Renamed
+                // rather than Changed.
+                fsWatcher.Changed += (_, _) => saved.Signal();
+                fsWatcher.Created += (_, _) => saved.Signal();
+                fsWatcher.Renamed += (_, _) => saved.Signal();
+                fsWatcher.EnableRaisingEvents = true;
+                return fsWatcher;
+            })
+            .ToList();
 
-        while (!cancellationToken.IsCancellationRequested)
+        try
         {
-            await saved.WaitAsync(cancellationToken);
-            await OnSavedAsync(runAsync, cancellationToken);
+            foreach (var fileInfo in fileInfos)
+            {
+                _writeLine($"Watching {fileInfo.FullName}");
+            }
+
+            _writeLine("Save a watched file to recompile. Ctrl+C to stop.");
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await saved.WaitAsync(cancellationToken);
+                await OnSavedAsync(runAsync, cancellationToken);
+            }
+        }
+        finally
+        {
+            foreach (var fsWatcher in watchers)
+            {
+                fsWatcher.Dispose();
+            }
         }
     }
 

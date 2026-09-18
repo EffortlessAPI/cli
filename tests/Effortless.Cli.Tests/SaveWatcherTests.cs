@@ -196,4 +196,64 @@ public sealed class SaveWatcherTests
 
         Assert.Contains("does not exist", ex.Message);
     }
+
+    [Fact(DisplayName = "unit-save-watcher-multi-file: a save to any watched file triggers a run")]
+    public async Task SaveToAnyWatchedFileTriggersRun()
+    {
+        using var directory = new TestDirectory();
+        var rulebookPath = Path.Combine(directory.Path, "effortless-rulebook.json");
+        var effortlessJsonPath = Path.Combine(directory.Path, "effortless.json");
+        File.WriteAllText(rulebookPath, "{}");
+        File.WriteAllText(effortlessJsonPath, "{}");
+
+        var watcher = NoDelayWatcher();
+        using var cts = new CancellationTokenSource();
+        var runs = 0;
+        var ranOnce = new TaskCompletionSource();
+
+        var watchTask = watcher.WatchAsync(
+            new[] { rulebookPath, effortlessJsonPath },
+            _ =>
+            {
+                Interlocked.Increment(ref runs);
+                ranOnce.TrySetResult();
+                return Task.CompletedTask;
+            },
+            cts.Token);
+
+        // Give the FileSystemWatcher a moment to start, then save the second
+        // (non-rulebook) file — it alone must be enough to trigger a run.
+        await Task.Delay(200);
+        File.WriteAllText(effortlessJsonPath, "{\"changed\":true}");
+
+        await ranOnce.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        cts.Cancel();
+        try
+        {
+            await watchTask;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        Assert.True(runs >= 1);
+    }
+
+    [Fact(DisplayName = "unit-save-watcher-multi-file-missing: any missing watched file fails clearly")]
+    public async Task AnyMissingWatchedFileFailsClearly()
+    {
+        using var directory = new TestDirectory();
+        var existing = Path.Combine(directory.Path, "effortless-rulebook.json");
+        File.WriteAllText(existing, "{}");
+        var missing = Path.Combine(directory.Path, "effortless.json");
+
+        var watcher = NoDelayWatcher();
+
+        var ex = await Assert.ThrowsAsync<FileNotFoundException>(
+            () => watcher.WatchAsync(
+                new[] { existing, missing },
+                _ => Task.CompletedTask));
+
+        Assert.Contains("does not exist", ex.Message);
+    }
 }

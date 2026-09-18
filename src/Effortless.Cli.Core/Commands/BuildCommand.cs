@@ -148,6 +148,14 @@ public sealed class BuildCommand
             }
         }
 
+        // effortless.json is watched alongside the rulebook so that a newly
+        // registered tool (e.g. via -install) is picked up by the same
+        // running watcher, without needing a rulebook save to trigger it.
+        var effortlessJsonPath = Path.Combine(project.RootPath, "effortless.json");
+        var filesToWatch = File.Exists(effortlessJsonPath)
+            ? new[] { fileInfo.FullName, effortlessJsonPath }
+            : new[] { fileInfo.FullName };
+
         var watcher = new SaveWatcher(writeLine: line => CliLog.LogLine(line));
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>
@@ -159,7 +167,7 @@ public sealed class BuildCommand
         try
         {
             watcher.WatchAsync(
-                    fileInfo.FullName,
+                    filesToWatch,
                     _ =>
                     {
                         int result;
