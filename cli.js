@@ -7,15 +7,96 @@ const path = require('path');
 const fs = require('fs');
 
 const appDir = path.dirname(require.main.filename);
-const rebuildProjectPath = path.join(appDir, 'src', 'Effortless.Cli', 'Effortless.Cli.csproj');
-const outputPath = path.join(appDir, 'src', 'Effortless.Cli', 'bin', 'Release', 'net8.0', 'Effortless.Cli.dll');
-const buildStampPath = path.join(appDir, 'src', 'Effortless.Cli', 'bin', 'Release', 'net8.0', '.built-version');
+const pkg = require(path.join(appDir, 'package.json'));
+const pkgVersion = pkg.version;
+
+// platform/arch -> platform package name. Must match the RID matrix in
+// docs/plans/self-contained-binaries.md and scripts/build-platform-packages.mjs.
+const PLATFORM_PACKAGES = {
+    'darwin:arm64': '@effortlessapi/cli-darwin-arm64',
+    'darwin:x64': '@effortlessapi/cli-darwin-x64',
+    'win32:x64': '@effortlessapi/cli-win32-x64',
+    'win32:arm64': '@effortlessapi/cli-win32-arm64',
+    'linux:x64': '@effortlessapi/cli-linux-x64',
+    'linux:arm64': '@effortlessapi/cli-linux-arm64',
+};
+
+const binaryName = process.platform === 'win32' ? 'Effortless.Cli.exe' : 'Effortless.Cli';
+
+function fail(message) {
+    console.error(message);
+    process.exit(1);
+}
+
+// A git checkout still has src/ next to cli.js; a published install does not.
+function isDevCheckout() {
+    return fs.existsSync(path.join(appDir, 'src', 'Effortless.Cli', 'Effortless.Cli.csproj'));
+}
+
+// Resolve the prebuilt binary shipped by this platform's optional dependency.
+// Returns null when the package isn't installed (unsupported platform, or
+// --no-optional), so the caller can fall back to developer mode or report it.
+function resolvePlatformBinary() {
+    const key = `${process.platform}:${process.arch}`;
+    const packageName = PLATFORM_PACKAGES[key];
+    if (!packageName) {
+        fail(
+            `Effortless CLI does not ship a binary for ${process.platform}/${process.arch}.\n` +
+            `Supported platforms: ${Object.keys(PLATFORM_PACKAGES).join(', ')}.`
+        );
+    }
+
+    let packageJsonPath;
+    try {
+        packageJsonPath = require.resolve(`${packageName}/package.json`, { paths: [appDir] });
+    } catch {
+        return { packageName, missing: true };
+    }
+
+    const platformVersion = require(packageJsonPath).version;
+    if (platformVersion !== pkgVersion) {
+        fail(
+            `Effortless CLI version mismatch.\n` +
+            `  ${pkg.name}: ${pkgVersion}\n` +
+            `  ${packageName}: ${platformVersion}\n` +
+            `Reinstall to resync: npm install -g ${pkg.name}@${pkgVersion}`
+        );
+    }
+
+    const binary = path.join(path.dirname(packageJsonPath), 'bin', binaryName);
+    if (!fs.existsSync(binary)) {
+        fail(
+            `Effortless CLI binary is missing from ${packageName}.\n` +
+            `Expected: ${binary}\n` +
+            `Reinstall to repair: npm install -g ${pkg.name}@${pkgVersion}`
+        );
+    }
+
+    // npm has historically dropped the executable bit on extraction; repair it
+    // once rather than failing on an otherwise-good install.
+    try {
+        fs.accessSync(binary, fs.constants.X_OK);
+    } catch {
+        try {
+            fs.chmodSync(binary, 0o755);
+            fs.accessSync(binary, fs.constants.X_OK);
+        } catch {
+            fail(
+                `Effortless CLI binary is not executable: ${binary}\n` +
+                `Fix with: chmod +x "${binary}"`
+            );
+        }
+    }
+
+    return { packageName, binary };
+}
+
+// --- developer mode -------------------------------------------------------
+// Only reachable from a git checkout. Published installs never build anything.
 
 // Sync version from package.json into .csproj <Version> and CLI_VERSION constant.
 // Mirrors installers/windows/Scripts/build.ps1 so dev builds and installers match.
-// Returns true if any source file was modified (caller forces a rebuild).
 function syncVersionFromPackageJson() {
-    const pkgVersion = require(path.join(appDir, 'package.json')).version;
     // npm-safe UTC stamp: "2026.424.1854" -> "2026.4.24.1854"
     const m = pkgVersion.match(/^(\d{4})\.(\d{3,4})\.(\d{1,4})$/);
     if (!m) {
@@ -38,10 +119,9 @@ function syncVersionFromPackageJson() {
     const pad = (n, width) => String(n).padStart(width, '0');
     const displayVersion = `v${m[1]}-${pad(month, 2)}-${pad(day, 2)}-${pad(hourMinute, 4)}`;
 
-    let changed = false;
     const updates = [
         {
-            file: rebuildProjectPath,
+            file: path.join(appDir, 'src', 'Effortless.Cli', 'Effortless.Cli.csproj'),
             pattern: /<Version>.*?<\/Version>/,
             replacement: `<Version>${csprojVersion}</Version>`,
         },
@@ -60,52 +140,72 @@ function syncVersionFromPackageJson() {
         if (!fs.existsSync(u.file)) continue;
         const before = fs.readFileSync(u.file, 'utf8');
         const after = before.replace(u.pattern, u.replacement);
-        if (after !== before) {
-            fs.writeFileSync(u.file, after);
-            changed = true;
+        if (after !== before) fs.writeFileSync(u.file, after);
+    }
+}
+
+// Build from source and return the DLL to run under `dotnet`.
+// Rebuilds whenever the compiled DLL wasn't built for the current
+// package.json version: a fresh pull of a released commit already has the
+// .csproj/CliVersion.cs pre-stamped, so "did I edit a file" is not a
+// sufficient signal and a stale DLL would otherwise run forever.
+function buildDevCheckout() {
+    const projectPath = path.join(appDir, 'src', 'Effortless.Cli', 'Effortless.Cli.csproj');
+    const outputPath = path.join(appDir, 'src', 'Effortless.Cli', 'bin', 'Release', 'net8.0', 'Effortless.Cli.dll');
+    const buildStampPath = path.join(appDir, 'src', 'Effortless.Cli', 'bin', 'Release', 'net8.0', '.built-version');
+
+    syncVersionFromPackageJson();
+
+    const builtVersion = fs.existsSync(buildStampPath)
+        ? fs.readFileSync(buildStampPath, 'utf8').trim()
+        : null;
+
+    if (builtVersion !== pkgVersion || !fs.existsSync(outputPath)) {
+        console.error('Effortless CLI: developer mode (building from source in this checkout)...');
+        try {
+            execSync(`dotnet build "${projectPath}" --configuration Release`, {
+                stdio: 'inherit',
+                cwd: appDir,
+            });
+            fs.mkdirSync(path.dirname(buildStampPath), { recursive: true });
+            fs.writeFileSync(buildStampPath, pkgVersion);
+        } catch (error) {
+            fail(
+                'Failed to build the Effortless CLI from source.\n' +
+                'Developer mode needs the .NET 8 SDK: https://dotnet.microsoft.com/download\n' +
+                `${error.message}`
+            );
         }
     }
-    return changed;
+
+    return outputPath;
 }
 
-syncVersionFromPackageJson();
+// --- dispatch -------------------------------------------------------------
 
-// Rebuild whenever the compiled DLL wasn't built for the current
-// package.json version. syncVersionFromPackageJson()'s own "did I have to
-// edit a file" signal is not enough: a fresh git pull/clone of a released
-// commit already has the .csproj/CliVersion.cs pre-stamped to that release's
-// version (release.sh commits them already synced), so no edit happens and
-// the stale, previously-compiled DLL would otherwise run forever with no
-// error and no visible change in -version.
-const pkgVersion = require(path.join(appDir, 'package.json')).version;
-const builtVersion = fs.existsSync(buildStampPath)
-    ? fs.readFileSync(buildStampPath, 'utf8').trim()
-    : null;
+let command;
+let args;
 
-if (builtVersion !== pkgVersion || !fs.existsSync(outputPath)) {
-    console.log('Building Effortless CLI...');
-    try {
-        execSync(`dotnet build "${rebuildProjectPath}" --configuration Release`, {
-            stdio: 'inherit',
-            cwd: appDir
-        });
-        fs.mkdirSync(path.dirname(buildStampPath), { recursive: true });
-        fs.writeFileSync(buildStampPath, pkgVersion);
-    } catch (error) {
-        console.error('Failed to build .NET solution:', error);
-        process.exit(1);
-    }
+const resolved = isDevCheckout() ? null : resolvePlatformBinary();
+
+if (resolved && !resolved.missing) {
+    command = resolved.binary;
+    args = process.argv.slice(2);
+} else if (isDevCheckout()) {
+    command = 'dotnet';
+    args = [buildDevCheckout(), ...process.argv.slice(2)];
+} else {
+    fail(
+        `Effortless CLI could not find its binary for ${process.platform}/${process.arch}.\n` +
+        `Expected package: ${resolved.packageName}@${pkgVersion}\n` +
+        `This usually means the install skipped optional dependencies ` +
+        `(--no-optional / --omit=optional).\n` +
+        `Reinstall with them enabled: npm install -g ${pkg.name}@${pkgVersion}`
+    );
 }
 
-// Run the CLI
 try {
-    const child = spawn('dotnet', [
-        outputPath,
-        ...process.argv.slice(2)
-    ], {
-        stdio: 'inherit',
-        // cwd: appDir
-    });
+    const child = spawn(command, args, { stdio: 'inherit' });
     child.on('error', (error) => {
         console.error('Failed to run CLI:', error);
         process.exit(1);

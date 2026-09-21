@@ -10,6 +10,23 @@
     <Version>2026.9.13.1830</Version>
   </PropertyGroup>
 
+  <!-- Self-contained single-file publish: ships the runtime inside the binary so
+       users never need a .NET SDK. PublishTrimmed is deliberately NOT set —
+       Newtonsoft.Json is reflection-heavy and trimming it fails at runtime.
+
+       These apply to `dotnet publish -r <rid>` only. Setting SelfContained
+       unconditionally would also make a plain `dotnet build` emit into a
+       RID-qualified bin/Release/net8.0/<rid>/ directory, which breaks the
+       developer-mode path in cli.js (and every contributor's build) because
+       it looks for bin/Release/net8.0/Effortless.Cli.dll. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="../Effortless.Cli.Core/Effortless.Cli.Core.csproj" />
   </ItemGroup>

@@ -89,7 +89,7 @@ public sealed class ShimTests
             timeoutMs: 300_000);
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("Building Effortless CLI...", result.Stdout, StringComparison.Ordinal);
+        Assert.Contains("developer mode", result.Combined, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(expectedDisplayVersion + Environment.NewLine, result.Stdout, StringComparison.Ordinal);
         Assert.Contains(
             $"<Version>{expectedCsprojVersion}</Version>",
@@ -146,7 +146,7 @@ public sealed class ShimTests
             timeoutMs: 300_000);
 
         Assert.Equal(0, firstRun.ExitCode);
-        Assert.Contains("Building Effortless CLI...", firstRun.Stdout, StringComparison.Ordinal);
+        Assert.Contains("developer mode", firstRun.Combined, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(CliUnderTest.DisplayVersion + Environment.NewLine, firstRun.Stdout, StringComparison.Ordinal);
         Assert.True(File.Exists(stampPath));
         Assert.Equal(CliUnderTest.PackageVersion, File.ReadAllText(stampPath).Trim());
@@ -154,7 +154,7 @@ public sealed class ShimTests
         var secondRun = await shim.RunNode(["-version"], sandbox.ProjectPath);
 
         Assert.Equal(0, secondRun.ExitCode);
-        Assert.DoesNotContain("Building Effortless CLI...", secondRun.Stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("developer mode", secondRun.Combined, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
             CliUnderTest.DisplayVersion + Environment.NewLine,
             secondRun.Stdout);

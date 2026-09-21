@@ -25,7 +25,8 @@ time the project is loaded.
 
 ### npm
 
-.NET 8 and Node.js are required:
+Node.js is the only requirement — no .NET install, and nothing is compiled on
+your machine:
 
 ```bash
 npm install -g @effortlessapi/cli
@@ -35,10 +36,21 @@ effortless -version
 The official npm package is `@effortlessapi/cli`. The unscoped npm package
 named `effortless` is unrelated software and must not be used.
 
-The npm shim builds the `Effortless.Cli` project in Release mode when the
-compiled CLI is missing or the package version changed.
+`@effortlessapi/cli` is a small launcher. The CLI itself ships as a
+self-contained binary in a per-platform optional dependency
+(`@effortlessapi/cli-darwin-arm64`, `-linux-x64`, `-win32-x64`, and so on), so
+npm downloads exactly one binary for your platform and the bundled .NET runtime
+rides along inside it.
+
+Installing with `--omit=optional` (or `--no-optional`) skips that binary; the
+CLI then reports the missing platform package and the command to fix it.
 
 ### Development checkout
+
+Contributors do need the [.NET 8 SDK](https://dotnet.microsoft.com/download):
+a git checkout has no prebuilt binary, so the launcher falls back to
+"developer mode" and builds `Effortless.Cli` from source on first run (and
+again whenever the package version changes).
 
 ```bash
 git clone https://github.com/EffortlessAPI/cli.git

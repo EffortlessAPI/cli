@@ -1,7 +1,6 @@
 {
   "name": "@effortlessapi/cli",
   "version": "2026.913.1830",
-  "dotnet": "8.0.410",
   "description": "REST-only command-line client for EffortlessAPI transpilers",
   "bin": {
     "ssotme": "cli.js",
@@ -11,11 +10,7 @@
   },
   "files": [
     "cli.js",
-    "lib/",
-    "Directory.Build.props",
-    "src/",
-    "!src/**/bin/**",
-    "!src/**/obj/**"
+    "lib/"
   ],
   "scripts": {
     "build": "dotnet build Effortless.Cli.sln --configuration Release",
@@ -24,7 +19,6 @@
     "generate": "node scripts/generate-from-rulebook.mjs",
     "validate:rulebook": "node scripts/validate-rulebook.mjs",
     "build:docs": "effortless build",
-    "postinstall": "node cli.js -version",
     "start": "node cli.js"
   },
   "repository": {
@@ -45,5 +39,13 @@
     "transpiler"
   ],
   "author": "EffortlessAPI",
-  "license": "MIT"
+  "license": "MIT",
+  "optionalDependencies": {
+    "@effortlessapi/cli-darwin-arm64": "2026.913.1830",
+    "@effortlessapi/cli-darwin-x64": "2026.913.1830",
+    "@effortlessapi/cli-win32-x64": "2026.913.1830",
+    "@effortlessapi/cli-win32-arm64": "2026.913.1830",
+    "@effortlessapi/cli-linux-x64": "2026.913.1830",
+    "@effortlessapi/cli-linux-arm64": "2026.913.1830"
+  }
 }

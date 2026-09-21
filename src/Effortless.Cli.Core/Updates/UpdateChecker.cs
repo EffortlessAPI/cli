@@ -44,7 +44,27 @@ public sealed class UpdateChecker
         _runProcess = runProcess ?? (startInfo =>
         {
             using var process = Process.Start(startInfo);
-            process?.WaitForExit();
+            if (process is null)
+            {
+                return;
+            }
+
+            // A redirected pipe must be drained: npm can emit more than the
+            // pipe buffer holds, and an undrained child blocks forever on
+            // write while we block forever on WaitForExit.
+            if (startInfo.RedirectStandardOutput)
+            {
+                process.OutputDataReceived += static (_, _) => { };
+                process.BeginOutputReadLine();
+            }
+
+            if (startInfo.RedirectStandardError)
+            {
+                process.ErrorDataReceived += static (_, _) => { };
+                process.BeginErrorReadLine();
+            }
+
+            process.WaitForExit();
         });
     }
 
@@ -144,16 +164,28 @@ public sealed class UpdateChecker
     private void ReinstallNow()
     {
         Console.WriteLine("Reinstalling via npm install -g @effortlessapi/cli@latest...");
-        ReinstallSilently();
+        Reinstall();
         Console.WriteLine(
             "Reinstalled. Restart your shell or open a new terminal to use the new version.");
     }
 
-    private void ReinstallSilently() =>
+    // Visible reinstall (-checkVersion): the user asked for it and is waiting,
+    // so npm's own progress output belongs on the console.
+    private void Reinstall() => Reinstall(captureOutput: false);
+
+    // Background reinstall: npm writes its own progress/summary ("changed 1
+    // package in 5s") to stdout/stderr, which must never interleave with the
+    // foreground command's output — a `-version` whose stdout carries npm
+    // chatter breaks any caller parsing it.
+    private void ReinstallSilently() => Reinstall(captureOutput: true);
+
+    private void Reinstall(bool captureOutput) =>
         _runProcess(new ProcessStartInfo("npm")
         {
             ArgumentList = { "install", "-g", "@effortlessapi/cli@latest" },
             UseShellExecute = false,
+            RedirectStandardOutput = captureOutput,
+            RedirectStandardError = captureOutput,
         });
 
     private string FetchLatestMainSha() =>

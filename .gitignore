@@ -15,3 +15,6 @@ installers/*/Resources/
 installers/*/bin/
 installers/*/build/
 tests/**/TestResults/
+
+# Self-contained platform-package build output (scripts/build-platform-packages.mjs)
+artifacts/
