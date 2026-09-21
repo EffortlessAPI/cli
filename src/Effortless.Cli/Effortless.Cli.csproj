@@ -7,7 +7,7 @@
     <Nullable>disable</Nullable>
     <AssemblyName>Effortless.Cli</AssemblyName>
     <RootNamespace>Effortless.Cli</RootNamespace>
-    <Version>2026.9.13.1830</Version>
+    <Version>2026.9.21.2345</Version>
   </PropertyGroup>
 
   <!-- Self-contained single-file publish: ships the runtime inside the binary so
