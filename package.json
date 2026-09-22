@@ -1,6 +1,6 @@
 {
   "name": "@effortlessapi/cli",
-  "version": "2026.922.33",
+  "version": "2026.922.609",
   "description": "REST-only command-line client for EffortlessAPI transpilers",
   "bin": {
     "ssotme": "cli.js",
@@ -41,11 +41,11 @@
   "author": "EffortlessAPI",
   "license": "MIT",
   "optionalDependencies": {
-    "@effortlessapi/cli-darwin-arm64": "2026.922.33",
-    "@effortlessapi/cli-darwin-x64": "2026.922.33",
-    "@effortlessapi/cli-linux-arm64": "2026.922.33",
-    "@effortlessapi/cli-linux-x64": "2026.922.33",
-    "@effortlessapi/cli-win32-arm64": "2026.922.33",
-    "@effortlessapi/cli-win32-x64": "2026.922.33"
+    "@effortlessapi/cli-darwin-arm64": "2026.922.609",
+    "@effortlessapi/cli-darwin-x64": "2026.922.609",
+    "@effortlessapi/cli-linux-arm64": "2026.922.609",
+    "@effortlessapi/cli-linux-x64": "2026.922.609",
+    "@effortlessapi/cli-win32-arm64": "2026.922.609",
+    "@effortlessapi/cli-win32-x64": "2026.922.609"
   }
 }
