@@ -39,6 +39,14 @@ public class EffortlessProject
     [JsonProperty(DefaultValueHandling = DefaultValueHandling.IgnoreAndPopulate, PropertyName = "ProjectTranspilers")]
     public BindingList<ProjectTranspiler> ProjectTranspilers { get; set; }
 
+    /// <summary>
+    /// Set when ProjectLocator renames a legacy ssotme.json to effortless.json.
+    /// The first catalog check then disables steps whose tools no longer exist
+    /// and clears this flag.
+    /// </summary>
+    [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore, PropertyName = "MigratedFromSsotme")]
+    public bool MigratedFromSsotme { get; set; }
+
     public List<string> HiddenPaths { get; set; }
 
     public List<string> ExpandedPaths { get; set; }

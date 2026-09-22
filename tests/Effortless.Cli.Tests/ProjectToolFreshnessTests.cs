@@ -102,6 +102,70 @@ public sealed class ProjectToolFreshnessTests
         Assert.Equal(Head, project.ProjectTranspilers[0].LastVersionUsed);
     }
 
+    [Fact(DisplayName = "unit-tool-freshness-disabled-step-skipped: a disabled step with a missing tool does not fail the gate")]
+    public void DisabledStepWithMissingToolIsSkipped()
+    {
+        using var directory = new TestDirectory();
+        var index = CreateIndex(directory);
+        WriteCatalog(index, Catalog());
+        var freshness = new ProjectToolFreshness(index);
+
+        var project = ProjectWith(
+            new ProjectTranspiler
+            {
+                Name = "SSoT",
+                RelativePath = "",
+                CommandLine = "effortless/ssot -p ssot-key=rec1",
+                IsDisabled = true,
+            });
+
+        var plan = freshness.Plan(project, MissingProjectToolPolicy.Fail);
+
+        Assert.True(plan.IsSuccessful, plan.Error);
+        Assert.Empty(plan.Entries);
+    }
+
+    [Fact(DisplayName = "unit-tool-freshness-legacy-disable: the migration policy disables a missing-tool step and still resolves the rest")]
+    public void DisablePolicyDisablesMissingToolSteps()
+    {
+        using var directory = new TestDirectory();
+        var index = CreateIndex(directory);
+        WriteCatalog(index, Catalog());
+        var freshness = new ProjectToolFreshness(index);
+
+        var project = ProjectWith(
+            new ProjectTranspiler
+            {
+                Name = "SSoT",
+                RelativePath = "",
+                CommandLine = "effortless/ssot -p ssot-key=rec1",
+            },
+            new ProjectTranspiler
+            {
+                Name = "Upper",
+                RelativePath = "",
+                CommandLine = "effortless/common/to-uppercase -i input.txt",
+            });
+
+        var plan = freshness.Plan(project, MissingProjectToolPolicy.Disable);
+
+        Assert.True(plan.IsSuccessful, plan.Error);
+        Assert.Equal(1, plan.MissingCount);
+        Assert.True(project.ProjectTranspilers[0].IsDisabled);
+        Assert.False(project.ProjectTranspilers[1].IsDisabled);
+    }
+
+    private static EffortlessProject ProjectWith(params ProjectTranspiler[] steps) =>
+        new()
+        {
+            Name = "Demo",
+            RootPath = System.IO.Path.GetTempPath(),
+            ExpandedPaths = [],
+            HiddenPaths = [],
+            ProjectSettings = new BindingList<ProjectSetting>(),
+            ProjectTranspilers = new BindingList<ProjectTranspiler>(steps),
+        };
+
     private static RemoteToolsIndex CreateIndex(TestDirectory directory) =>
         new(
             new DirectoryInfo(directory.Path),

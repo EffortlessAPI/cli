@@ -533,9 +533,26 @@ public sealed class CommandDispatcher
             return true;
         }
 
+        var migrating = project.MigratedFromSsotme;
         var plan = _projectToolFreshness.Plan(
             project,
-            MissingProjectToolPolicy.Fail);
+            migrating
+                ? MissingProjectToolPolicy.Disable
+                : MissingProjectToolPolicy.Fail);
+        if (migrating)
+        {
+            // One-time legacy ssotme.json migration: steps whose tools are
+            // gone were marked IsDisabled by Plan; record that and drop the flag.
+            foreach (var entry in plan.Entries.Where(entry => entry.IsMissing))
+            {
+                Console.WriteLine(
+                    $"[cli] Migrated ssotme.json: disabled step '{entry.Step.Name}' - tool '{entry.ToolName}' is not in the current catalog.");
+            }
+
+            project.MigratedFromSsotme = false;
+            project.Save();
+        }
+
         if (plan.Entries.Count == 0)
         {
             _projectCatalogChecked = true;
@@ -547,7 +564,20 @@ public sealed class CommandDispatcher
         if (!plan.IsSuccessful)
         {
             WriteError($"ERROR: {plan.Error}");
-            return false;
+            ExplainMissingProjectTools(project, invocation, plan);
+            if (!OfferToDisableMissingSteps(project, plan))
+            {
+                return false;
+            }
+
+            plan = _projectToolFreshness.Plan(
+                project,
+                MissingProjectToolPolicy.Fail);
+            if (!plan.IsSuccessful)
+            {
+                WriteError($"ERROR: {plan.Error}");
+                return false;
+            }
         }
 
         // D17: the automatic gate advances unpinned steps to HEAD but never
@@ -556,6 +586,99 @@ public sealed class CommandDispatcher
         _projectCatalogChecked = true;
         Console.WriteLine(
             "[cli] Project tools are current.");
+        return true;
+    }
+
+    /// <summary>
+    /// The catalog gate stopped the run: say which project file it read, which
+    /// steps are broken, why that blocks even a one-off tool run, and how to fix it.
+    /// </summary>
+    private static void ExplainMissingProjectTools(
+        EffortlessProject project,
+        CliInvocation invocation,
+        ProjectToolUpgradePlan plan)
+    {
+        var missing = plan.Entries.Where(entry => entry.IsMissing).ToList();
+        var projectFile = Path.Combine(project.RootPath, "effortless.json");
+
+        Console.WriteLine();
+        Console.WriteLine(
+            $"Nothing was run. The project this command belongs to has {missing.Count} step(s) whose tool is not in the current tool catalog.");
+        Console.WriteLine();
+        Console.WriteLine($"  Project file: {projectFile}");
+        if (!string.Equals(
+                Path.GetFullPath(project.RootPath).TrimEnd(Path.DirectorySeparatorChar),
+                Path.GetFullPath(invocation.CurrentDirectory ?? project.RootPath).TrimEnd(Path.DirectorySeparatorChar),
+                StringComparison.Ordinal))
+        {
+            Console.WriteLine(
+                $"  (found by searching up from {invocation.CurrentDirectory} - the nearest folder with a project file)");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  Steps with a missing tool:");
+        foreach (var entry in missing)
+        {
+            var folder = string.IsNullOrWhiteSpace(entry.Step.RelativePath)
+                ? "/"
+                : entry.Step.RelativePath;
+            Console.WriteLine(
+                $"    - '{entry.Step.Name}' in {folder}: {entry.Step.CommandLine}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine(
+            "Why: before running any tool - even a single one-off tool - the CLI checks every enabled");
+        Console.WriteLine(
+            "step in the project against the catalog and moves it to the latest version. A step whose");
+        Console.WriteLine(
+            "tool was renamed or retired (common in old ssotme.json projects) stops that check.");
+        Console.WriteLine();
+        Console.WriteLine("How to fix it (any one per step):");
+        Console.WriteLine(
+            "  - Disable the step: it stays in the file and build skips it. Set \"IsDisabled\": true on");
+        Console.WriteLine(
+            "    it in effortless.json, or run `effortless <tool> -disable` from that step's folder.");
+        Console.WriteLine(
+            "  - Remove the step: `effortless -uninstall <tool>` from that step's folder.");
+        Console.WriteLine(
+            "  - Point it at a tool you run yourself: `effortless -setToolUrl <tool>=<url>`.");
+        Console.WriteLine(
+            "  - Or run this command from a folder that has its own effortless.json (`effortless -init`).");
+        Console.WriteLine();
+    }
+
+    /// <summary>
+    /// Interactive terminals only: offer to disable every step whose tool is
+    /// missing. Returns true when the steps were disabled and saved.
+    /// </summary>
+    private static bool OfferToDisableMissingSteps(
+        EffortlessProject project,
+        ProjectToolUpgradePlan plan)
+    {
+        if (Console.IsInputRedirected || Console.IsOutputRedirected)
+        {
+            return false;
+        }
+
+        var missing = plan.Entries.Where(entry => entry.IsMissing).ToList();
+        Console.Write(
+            $"Disable these {missing.Count} step(s) in effortless.json now and continue? [y/N]: ");
+        var answer = Console.ReadLine()?.Trim().ToLowerInvariant();
+        if (answer is not ("y" or "yes"))
+        {
+            Console.WriteLine("Nothing changed.");
+            return false;
+        }
+
+        foreach (var entry in missing)
+        {
+            entry.Step.IsDisabled = true;
+        }
+
+        project.Save();
+        Console.WriteLine(
+            $"[cli] Disabled {missing.Count} step(s). Re-enable one with `effortless <tool> -enable` from its folder.");
         return true;
     }
 

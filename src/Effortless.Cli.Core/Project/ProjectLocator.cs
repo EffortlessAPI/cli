@@ -1,6 +1,7 @@
 using System.Threading;
 using Effortless.Cli.Seeds;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Effortless.Cli.Project;
 
@@ -32,6 +33,32 @@ public static class ProjectLocator
         }
     }
 
+    /// <summary>
+    /// Renames ssotme.json to effortless.json and flags it MigratedFromSsotme
+    /// so the first catalog check disables steps whose tools are gone.
+    /// </summary>
+    private static void MigrateLegacyProjectFile(
+        FileInfo ssotmeFile,
+        FileInfo effortlessFile)
+    {
+        JObject json;
+        try
+        {
+            json = JObject.Parse(File.ReadAllText(ssotmeFile.FullName));
+        }
+        catch (JsonException)
+        {
+            File.Move(ssotmeFile.FullName, effortlessFile.FullName);
+            return;
+        }
+
+        json["MigratedFromSsotme"] = true;
+        File.WriteAllText(
+            effortlessFile.FullName,
+            json.ToString(Formatting.Indented) + Environment.NewLine);
+        File.Delete(ssotmeFile.FullName);
+    }
+
     public static FileInfo GetProjectFIAt(
         DirectoryInfo rootDirectory,
         bool reverseUpdate,
@@ -46,7 +73,7 @@ public static class ProjectLocator
 
         if (!effortlessFile.Exists && IsValidProjectFile(ssotmeFile))
         {
-            File.Move(ssotmeFile.FullName, effortlessFile.FullName);
+            MigrateLegacyProjectFile(ssotmeFile, effortlessFile);
             effortlessFile.Refresh();
         }
 

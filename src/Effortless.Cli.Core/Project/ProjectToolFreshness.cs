@@ -4,6 +4,12 @@ public enum MissingProjectToolPolicy
 {
     Fail,
     Skip,
+
+    /// <summary>
+    /// Legacy ssotme.json migration: a step whose tool no longer exists in the
+    /// catalog is marked IsDisabled instead of failing the gate.
+    /// </summary>
+    Disable,
 }
 
 /// <summary>
@@ -31,6 +37,13 @@ public sealed class ProjectToolFreshness
         foreach (var step in project.ProjectTranspilers
                      ?? Enumerable.Empty<ProjectTranspiler>())
         {
+            // A disabled step never runs in a normal build, so its tool
+            // does not have to exist in the catalog.
+            if (step.IsDisabled)
+            {
+                continue;
+            }
+
             var tool = EffortlessProject.GetToolName(step.CommandLine);
             if (IsExcluded(tool))
             {
@@ -56,11 +69,10 @@ public sealed class ProjectToolFreshness
 
                 entries.Add(
                     ProjectToolUpgradeEntry.Missing(step, tool));
-                if (missingToolPolicy == MissingProjectToolPolicy.Fail)
+                if (missingToolPolicy == MissingProjectToolPolicy.Disable)
                 {
-                    return ProjectToolUpgradePlan.Failed(
-                        entries,
-                        $"Project tool '{tool}' is missing from the current remote tools index or has no HEAD version.");
+                    step.IsDisabled = true;
+                    continue;
                 }
 
                 continue;
@@ -72,6 +84,16 @@ public sealed class ProjectToolFreshness
                     tool,
                     head,
                     pinResolves: PinResolves(tool, step.PinnedVersion)));
+        }
+
+        // Fail reports every missing step at once, not just the first.
+        var firstMissing = entries.FirstOrDefault(entry => entry.IsMissing);
+        if (missingToolPolicy == MissingProjectToolPolicy.Fail
+            && firstMissing is not null)
+        {
+            return ProjectToolUpgradePlan.Failed(
+                entries,
+                $"Project tool '{firstMissing.ToolName}' is missing from the current remote tools index or has no HEAD version.");
         }
 
         return ProjectToolUpgradePlan.Succeeded(entries);
