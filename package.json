@@ -1,6 +1,6 @@
 {
   "name": "@effortlessapi/cli",
-  "version": "2026.921.2345",
+  "version": "2026.921.2357",
   "description": "REST-only command-line client for EffortlessAPI transpilers",
   "bin": {
     "ssotme": "cli.js",
