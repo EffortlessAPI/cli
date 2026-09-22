@@ -44,6 +44,15 @@ const prefix = path.join(work, "prefix");
 // per-platform optional dependency that is not on the registry yet at release
 // time. Install this host's staged platform package alongside the tarball, or
 // every alias fails with the (correct) "could not find its binary" error.
+// A stale pin here is invisible at install time: npm skips an optional
+// dependency it cannot resolve, so the install "succeeds" with no binary and
+// the failure only shows up when someone runs the CLI.
+for (const [name, pinned] of Object.entries(
+  packageJson.optionalDependencies ?? {},
+)) {
+  assertEqual(pinned, packageJson.version, `${name} pin`);
+}
+
 const platformPackageName = platformPackageForHost();
 const platformPackageDir = path.join(
   root,

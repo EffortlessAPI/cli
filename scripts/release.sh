@@ -73,6 +73,22 @@ fi
 echo "Updating package.json version to ${VERSION}..."
 npm pkg set "version=${VERSION}"
 
+# The six platform packages are pinned to an exact version, and cli.js refuses
+# to run unless it matches the launcher's exactly. Stamping only the top-level
+# version leaves those pins on the PREVIOUS release, so npm silently skips
+# every optional dependency (they resolve to a version that does not exist yet)
+# and the install lands with no binary at all.
+echo "Stamping optionalDependencies to ${VERSION}..."
+node - "$VERSION" <<'NODE'
+const fs = require('fs');
+const version = process.argv[2];
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+for (const name of Object.keys(pkg.optionalDependencies ?? {})) {
+    pkg.optionalDependencies[name] = version;
+}
+fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+NODE
+
 COMMIT_SHA="$(git rev-parse HEAD)"
 echo "Stamping CommitSha (${COMMIT_SHA})..."
 CLI_VERSION_FILE="src/Effortless.Cli.Core/CliVersion.cs"
@@ -107,6 +123,21 @@ for dir in "${PLATFORM_PACKAGE_DIRS[@]}"; do
         exit 1
     fi
 done
+
+# Every optionalDependency pin must also be exactly VERSION. A stale pin does
+# not fail the install — npm skips an optional dependency it cannot resolve —
+# so this would ship an install with no binary and no error until first run.
+node - "$VERSION" <<'NODE'
+const pkg = require('./package.json');
+const bad = Object.entries(pkg.optionalDependencies ?? {})
+    .filter(([, pinned]) => pinned !== process.argv[2]);
+if (bad.length > 0) {
+    console.error(
+        `ERROR: optionalDependencies are not pinned to ${process.argv[2]}:\n` +
+        bad.map(([name, pinned]) => `  ${name}: ${pinned}`).join('\n'));
+    process.exit(1);
+}
+NODE
 
 if [ "$SKIP_NPM" = true ]; then
     echo "Skipping npm package validation (--skip-npm)."
