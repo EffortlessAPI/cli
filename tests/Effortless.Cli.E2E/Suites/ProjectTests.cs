@@ -1,3 +1,4 @@
+using Newtonsoft.Json.Linq;
 using System.Text.Json.Nodes;
 using Effortless.Cli.E2E.Harness;
 
@@ -257,7 +258,11 @@ public sealed class ProjectTests
         Assert.Equal(0, result.ExitCode);
         Assert.False(File.Exists(Path.Combine(sandbox.ProjectPath, "ssotme.json")));
         Assert.False(File.Exists(Path.Combine(sandbox.ProjectPath, "ssotme.env")));
-        Assert.Equal(projectJson, sandbox.ReadFile("effortless.json"));
+        // The rename keeps the content and adds the one-time migration flag.
+        var migrated = JObject.Parse(sandbox.ReadFile("effortless.json"));
+        Assert.True(migrated.Value<bool>("MigratedFromSsotme"));
+        migrated.Remove("MigratedFromSsotme");
+        Assert.True(JToken.DeepEquals(JObject.Parse(projectJson), migrated));
         Assert.Equal(environment, sandbox.ReadFile("effortless.env"));
     }
 

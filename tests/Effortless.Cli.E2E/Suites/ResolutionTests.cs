@@ -1375,8 +1375,9 @@ public sealed class ResolutionTests
                     ".effortless",
                     "remote_tools",
                     "effortless-tools.json")));
+        // The only step is disabled, so the catalog gate has nothing to check.
         Assert.Contains(
-            "[cli] Project tools are current.",
+            "SKIPPING DISABLED TRANSPILER: Echo",
             result.Stdout,
             StringComparison.Ordinal);
         Assert.Empty(bridge.Requests);
