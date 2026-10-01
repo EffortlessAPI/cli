@@ -1,3 +1,4 @@
+using Effortless.Cli.Config;
 using Effortless.Cli.Options;
 using Effortless.Cli.Seeds;
 
@@ -8,16 +9,22 @@ public sealed class SeedCommands
     private readonly SeedCatalogClient _catalog;
     private readonly SeedRepositoryManager _repositories;
     private readonly Func<SeedSources> _sources;
+    private readonly SeedLicenseClient _licenses;
+    private readonly JwtStore _jwtStore;
 
     public SeedCommands(
         SeedCatalogClient catalog = null,
         SeedRepositoryManager repositories = null,
-        Func<SeedSources> sources = null)
+        Func<SeedSources> sources = null,
+        SeedLicenseClient licenses = null,
+        JwtStore jwtStore = null)
     {
         _catalog = catalog ?? new SeedCatalogClient();
         _repositories =
             repositories ?? new SeedRepositoryManager();
         _sources = sources ?? (() => new SeedSources());
+        _licenses = licenses ?? new SeedLicenseClient();
+        _jwtStore = jwtStore ?? new JwtStore();
     }
 
     public int ListSources()
@@ -156,11 +163,72 @@ public sealed class SeedCommands
         var clonedPath = _repositories.Clone(
             cloneUrl,
             destination);
+
+        var licenseKey = invocation.Options.licenseKey;
+        if (!string.IsNullOrWhiteSpace(licenseKey)
+            && !TryBindLicense(licenseKey, requested, cloneUrl, destination, clonedPath))
+        {
+            return -1;
+        }
+
         Console.WriteLine(
             $"Cloned Effortless seed {label} to {clonedPath}");
         Console.WriteLine(
             $"Run `cd \"{clonedPath}\" && effortless build` when you are ready to execute its pipeline.");
         return 0;
+    }
+
+    /// <summary>
+    /// Spends the license key on the just-cloned repository. Requires a
+    /// signed-in session -- a key is held by an account, so an anonymous
+    /// clone cannot claim one. On any failure the freshly cloned directory
+    /// is removed rather than left as a half-bound repository the buyer
+    /// never actually holds a license for.
+    /// </summary>
+    private bool TryBindLicense(
+        string licenseKey,
+        string seedId,
+        string repoUrl,
+        string projectName,
+        string clonedPath)
+    {
+        if (!_jwtStore.IsAuthenticated())
+        {
+            WriteError(
+                "-licenseKey requires a signed-in session (a license key is held by an account). Run `effortless login` first, then retry the clone.");
+            TryRemoveDirectory(clonedPath);
+            return false;
+        }
+
+        var jwt = _jwtStore.GetStoredJWTToken();
+        var bound = _licenses.Bind(
+            jwt, licenseKey, seedId, repoUrl, projectName, sourceRulebook: null, out var error);
+        if (bound is null)
+        {
+            WriteError($"Could not bind license key: {error}");
+            TryRemoveDirectory(clonedPath);
+            return false;
+        }
+
+        var envPath = Path.Combine(clonedPath, "effortless.env");
+        EnvFile.WriteEnvValue(envPath, "EFFORTLESS_SEED_LICENSE_KEY", licenseKey);
+        Console.WriteLine($"Bound license key to this repository. Wrote EFFORTLESS_SEED_LICENSE_KEY to {envPath}.");
+        return true;
+    }
+
+    private static void TryRemoveDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+        }
+        catch (Exception exception)
+        {
+            WriteError($"Cloned repository at {path} could not be removed automatically: {exception.Message}");
+        }
     }
 
     private SeedRepository FindInAccount(

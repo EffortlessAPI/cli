@@ -91,6 +91,9 @@ public class CliOptions
     [CommandLineOption(Description = "Clones a public Effortless seed repository (account/repo, repo, or clone URL)", MinOccurs = 0, Aliases = "cs,clone")]
     public bool cloneSeed { get; set; }
 
+    [CommandLineOption(Description = "Seed license key to bind or recheck", MinOccurs = 0, Aliases = "lk")]
+    public string licenseKey { get; set; }
+
     [CommandLineOption(Description = "The account which the transpiler belongs to", MinOccurs = 0, Aliases = "a")]
     public string account { get; set; }
 
@@ -130,7 +133,7 @@ public class CliOptions
     [CommandLineOption(Description = "Add an account api key", MinOccurs = 0, Aliases = "api,setAccountKey")]
     public string setAccountAPIKey { get; set; }
 
-    [CommandLineOption(Description = "Sign in to EffortlessAPI (preview: the service does not enforce accounts yet)", MinOccurs = 0, Aliases = "auth,authenticate")]
+    [CommandLineOption(Description = "Sign in to EffortlessAPI with an emailed code", MinOccurs = 0, Aliases = "auth,authenticate")]
     public bool login { get; set; }
 
     [CommandLineOption(Description = "Sign this project in to EffortlessAPI (preview: nothing is enforced yet)", MinOccurs = 0, Aliases = "projectAuth")]

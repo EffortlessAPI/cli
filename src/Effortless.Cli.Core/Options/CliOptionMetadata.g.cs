@@ -390,6 +390,19 @@ public static class CliOptionMetadata
                     "Clones the seed and verifies effortless.json at its root. Accepts account/repo, a bare repository name (searched across the seed sources in order; an ambiguous name lists the candidates), or an HTTP(S) clone URL; an optional second argument names the destination directory. Preserves .git and never executes cloned code; prints the build command to run next.",
                     "effortless cloneSeed effortlessapi/my-seed"),
                 new(
+                    "licenseKey",
+                    "-licenseKey",
+                    "seeds",
+                    "modifier",
+                    "cloneSeed",
+                    "",
+                    "",
+                    "lk",
+                    "",
+                    "Bind or recheck a seed license key",
+                    "With cloneSeed, binds the key to the new repository (spending it) and writes it into the project's effortless.env; requires a signed-in session, since a key is held by an account. Every subsequent `effortless build` in that repository rechecks the key automatically -- no flag needed on build itself. A revoked key fails the build; anything else is logged and does not block it yet.",
+                    "effortless cloneSeed effortlessapi/my-seed -licenseKey EAPI-7K3F-9QX2-M4TD"),
+                new(
                     "account",
                     "-account",
                     "transpile-io",
@@ -569,7 +582,7 @@ public static class CliOptionMetadata
                     "auth,authenticate",
                     "auth,login,authenticate",
                     "Log in with an email magic link",
-                    "Prompts for an email address and signs in against the published effortless-auth tool, which is resolved through the normal catalog (a tool_urls.json override wins, so a local build can be used with -setToolUrl effortless-auth=http://localhost:30080). Stores the returned token in ~/.effortless. The service is a preview: every sign-in succeeds and nothing is enforced yet, and the output says so. Tools and buildOnTrigger never require login.",
+                    "Prompts for an email address, emails a 6-digit code through the published effortless-auth tool (resolved through the normal catalog; a tool_urls.json override wins, so a local build can be used with -setToolUrl effortless-auth=http://localhost:30080), then prompts for the code. The tool passes both steps through to the Effortless Identity API, which creates the account on first sign-in and returns a signed access token and a refresh token, stored in ~/.effortless. No tool enforces accounts yet; tools and buildOnTrigger never require login.",
                     "effortless login"),
                 new(
                     "projectLogin",
@@ -595,7 +608,7 @@ public static class CliOptionMetadata
                     "signout",
                     "logout,signout",
                     "Clear the stored login token",
-                    "Prints the logged-in account (if any) and asks for confirmation before deleting the global token files; then tells the effortless-auth service best-effort (POST /logout, cache-only resolution, failures ignored).",
+                    "Prints the logged-in account (if any) and asks for confirmation before deleting the global token files; then tells the effortless-auth service best-effort (POST /logout with the stored refresh token so the session is revoked; cache-only resolution, failures ignored).",
                     "effortless logout"),
                 new(
                     "info",
@@ -777,7 +790,7 @@ public static class CliOptionMetadata
                     "subscription",
                     "subscription,plan",
                     "Show the authenticated account's plan",
-                    "GET {auth}/plan on the effortless-auth tool and prints the plan and whether it is enforced (\"Plan: preview (not enforced yet ...)\"), plus the signed-in email when a token is stored. Works without a token because the service does not require one yet.",
+                    "GET {auth}/plan on the effortless-auth tool and prints the account's plan and whether it is enforced (\"Plan: <plan> (not enforced yet ...)\"), plus the signed-in email when a token is stored. An expired stored access token is refreshed first. Works without a token (plan \"preview\") because nothing requires one yet.",
                     "effortless plan"),
                 new(
                     "checkVersion",

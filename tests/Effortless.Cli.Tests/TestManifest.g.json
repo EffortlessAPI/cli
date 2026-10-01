@@ -390,5 +390,29 @@
     "status": "green",
     "slow": false,
     "interactive": false
+  },
+  {
+    "id": "unit-seed-license-bind",
+    "suite": "unit-core",
+    "priority": "P0",
+    "status": "green",
+    "slow": false,
+    "interactive": false
+  },
+  {
+    "id": "unit-seed-license-check",
+    "suite": "unit-core",
+    "priority": "P0",
+    "status": "green",
+    "slow": false,
+    "interactive": false
+  },
+  {
+    "id": "integration-build-license",
+    "suite": "unit-core",
+    "priority": "P0",
+    "status": "green",
+    "slow": false,
+    "interactive": false
   }
 ]

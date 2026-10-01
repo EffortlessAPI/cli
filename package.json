@@ -47,5 +47,8 @@
     "@effortlessapi/cli-linux-x64": "2026.922.609",
     "@effortlessapi/cli-win32-arm64": "2026.922.609",
     "@effortlessapi/cli-win32-x64": "2026.922.609"
+  },
+  "dependencies": {
+    "@effortlessapi/cli": "^2026.922.33"
   }
 }

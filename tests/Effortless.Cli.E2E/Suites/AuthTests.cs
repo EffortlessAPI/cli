@@ -7,9 +7,11 @@ namespace Effortless.Cli.E2E.Suites;
 public sealed class AuthTests
 {
     private const string Email = "a@b.c";
+    private const string Code = "123456";
     private const string ExistingEmail = "x@y.z";
+    private static readonly string EmailAndCode = $"{Email}{Environment.NewLine}{Code}{Environment.NewLine}";
 
-    [Fact(DisplayName = "auth-login-flow: login signs in against the effortless-auth tool")]
+    [Fact(DisplayName = "auth-login-flow: login signs in with an emailed code")]
     public async Task LoginCallsTheAuthTool()
     {
         var cli = new CliUnderTest();
@@ -21,23 +23,28 @@ public sealed class AuthTests
             ["login"],
             sandbox.ProjectPath,
             sandbox,
-            stdin: $"{Email}{Environment.NewLine}");
+            stdin: EmailAndCode);
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("Email: ", result.Stdout, StringComparison.Ordinal);
+        Assert.Contains("A sign-in code was sent to a@b.c.", result.Stdout, StringComparison.Ordinal);
+        Assert.Contains("Code: ", result.Stdout, StringComparison.Ordinal);
         Assert.Contains(
-            "Signed in (preview: the authentication service does not enforce accounts yet). Signed in as a@b.c.",
+            "Signed in (no tool enforces accounts yet). Signed in as a@b.c.",
             result.Stdout,
             StringComparison.Ordinal);
-        var request = Assert.Single(auth.Requests);
-        Assert.Equal(("POST", "login"), (request.Method, request.Route));
-        Assert.Contains("\"email\":\"a@b.c\"", request.RawBody, StringComparison.Ordinal);
+        var requests = auth.Requests.ToArray();
+        Assert.Equal(2, requests.Length);
+        Assert.Equal(("POST", "login"), (requests[0].Method, requests[0].Route));
+        Assert.Contains("\"email\":\"a@b.c\"", requests[0].RawBody, StringComparison.Ordinal);
+        Assert.Equal(("POST", "verify"), (requests[1].Method, requests[1].Route));
+        Assert.Contains("\"code\":\"123456\"", requests[1].RawBody, StringComparison.Ordinal);
         Assert.Equal(MockAuthTool.Token, File.ReadAllText(HomeConfigPath(sandbox, "effortlessapi_token.txt")));
         Assert.Contains(Email, File.ReadAllText(HomeConfigPath(sandbox, "effortlessapi_token_info.json")), StringComparison.Ordinal);
         auth.ThrowIfFaulted();
     }
 
-    [Fact(DisplayName = "auth-login-calls-tool-and-stores-token: login POSTs /login on the catalog-resolved auth tool and stores the token")]
+    [Fact(DisplayName = "auth-login-calls-tool-and-stores-token: login POSTs /login then /verify on the catalog-resolved auth tool and stores both tokens")]
     public async Task LoginResolvesTheToolThroughTheCatalog()
     {
         var cli = new CliUnderTest();
@@ -45,12 +52,16 @@ public sealed class AuthTests
         using var sandbox = SeedAuthCatalog(cli, auth, out var toolServer);
         await using var _ = toolServer;
 
-        var result = await cli.Run(["-login"], sandbox.ProjectPath, sandbox, stdin: $"{Email}{Environment.NewLine}");
+        var result = await cli.Run(["-login"], sandbox.ProjectPath, sandbox, stdin: EmailAndCode);
 
         Assert.Equal(0, result.ExitCode);
         Assert.DoesNotContain("CLOUD-BRIDGE CALL TRIGGERED", result.Stdout, StringComparison.Ordinal);
-        Assert.Equal("login", Assert.Single(auth.Requests).Route);
+        Assert.Equal(["login", "verify"], auth.Requests.Select(request => request.Route));
         Assert.True(File.Exists(HomeConfigPath(sandbox, "effortlessapi_token.txt")));
+        Assert.Contains(
+            MockAuthTool.RefreshToken,
+            File.ReadAllText(HomeConfigPath(sandbox, "effortlessapi_token_info.json")),
+            StringComparison.Ordinal);
         AssertSecretFileMode(HomeConfigPath(sandbox, "effortlessapi_token.txt"));
     }
 
@@ -93,7 +104,7 @@ public sealed class AuthTests
         Assert.Equal(0, result.ExitCode);
         var env = sandbox.ReadFile("effortless.env");
         Assert.Contains("EXISTING_KEY=keep", env, StringComparison.Ordinal);
-        Assert.Contains($"EFFORTLESS_JWT={MockAuthTool.Token}", env, StringComparison.Ordinal);
+        Assert.Contains($"EFFORTLESS_JWT={MockAuthTool.ProjectToken}", env, StringComparison.Ordinal);
         Assert.Contains("Project signed in (preview: the authentication service does not enforce accounts yet).", result.Stdout, StringComparison.Ordinal);
         var request = Assert.Single(auth.Requests);
         Assert.Equal(("POST", "project-login"), (request.Method, request.Route));
@@ -179,7 +190,7 @@ public sealed class AuthTests
         await using var auth = new MockAuthTool();
         using var sandbox = SeedAuthCatalog(cli, auth, out var toolServer);
         await using var _ = toolServer;
-        WriteGlobalToken(sandbox, CreateJwt(ExistingEmail), ExistingEmail);
+        WriteGlobalToken(sandbox, CreateJwt(ExistingEmail), ExistingEmail, "refresh-to-revoke");
 
         var result = await cli.Run(["logout"], sandbox.ProjectPath, sandbox, stdin: $"y{Environment.NewLine}");
 
@@ -187,6 +198,7 @@ public sealed class AuthTests
         Assert.False(File.Exists(HomeConfigPath(sandbox, "effortlessapi_token.txt")));
         var request = Assert.Single(auth.Requests);
         Assert.Equal(("POST", "logout"), (request.Method, request.Route));
+        Assert.Contains("\"refresh_token\":\"refresh-to-revoke\"", request.RawBody, StringComparison.Ordinal);
 
         // Unreachable service: still exit 0, still no error text.
         WriteGlobalToken(sandbox, CreateJwt(ExistingEmail), ExistingEmail);
@@ -221,7 +233,7 @@ public sealed class AuthTests
         Assert.All(auth.Requests, request => Assert.Null(request.Authorization));
     }
 
-    [Fact(DisplayName = "auth-subscription: subscription with a token")]
+    [Fact(DisplayName = "auth-subscription: subscription command sends the stored token")]
     public async Task PlanSendsTheStoredToken()
     {
         var cli = new CliUnderTest();
@@ -344,10 +356,53 @@ public sealed class AuthTests
                 ["effortless-auth"] = auth.BaseUri.ToString(),
             });
 
-        var result = await cli.Run(["login"], sandbox.ProjectPath, sandbox, stdin: $"{Email}{Environment.NewLine}");
+        var result = await cli.Run(["login"], sandbox.ProjectPath, sandbox, stdin: EmailAndCode);
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Equal("login", Assert.Single(auth.Requests).Route);
+        Assert.Equal(["login", "verify"], auth.Requests.Select(request => request.Route));
+    }
+
+    [Fact(DisplayName = "auth-login-bad-code-is-clear-error: a rejected sign-in code is a clear error and no token is written")]
+    public async Task RejectedCodeIsAClearError()
+    {
+        var cli = new CliUnderTest();
+        await using var auth = new MockAuthTool();
+        using var sandbox = SeedAuthCatalog(cli, auth, out var toolServer);
+        await using var _ = toolServer;
+        auth.Failure = (401, """{"error":"invalid_or_expired_code","message":"invalid_or_expired_token"}""");
+        auth.FailureRoute = "verify";
+
+        var result = await cli.Run(["login"], sandbox.ProjectPath, sandbox, stdin: EmailAndCode);
+
+        Assert.True(result.Failed);
+        Assert.Contains("The authentication service returned 401", result.Stderr, StringComparison.Ordinal);
+        Assert.Contains("invalid_or_expired_code", result.Stderr, StringComparison.Ordinal);
+        Assert.False(File.Exists(HomeConfigPath(sandbox, "effortlessapi_token.txt")));
+        Assert.False(File.Exists(HomeConfigPath(sandbox, "effortlessapi_token_info.json")));
+    }
+
+    [Fact(DisplayName = "auth-plan-refreshes-expired-token: plan refreshes an expired stored access token first")]
+    public async Task PlanRefreshesAnExpiredToken()
+    {
+        var cli = new CliUnderTest();
+        await using var auth = new MockAuthTool();
+        using var sandbox = SeedAuthCatalog(cli, auth, out var toolServer);
+        await using var _ = toolServer;
+        WriteGlobalToken(sandbox, CreateJwt(ExistingEmail, exp: 1_000_000_000L), ExistingEmail, MockAuthTool.RefreshToken);
+
+        var result = await cli.Run(["plan"], sandbox.ProjectPath, sandbox);
+
+        Assert.Equal(0, result.ExitCode);
+        var requests = auth.Requests.ToArray();
+        Assert.Equal(2, requests.Length);
+        Assert.Equal(("POST", "refresh"), (requests[0].Method, requests[0].Route));
+        Assert.Contains($"\"refresh_token\":\"{MockAuthTool.RefreshToken}\"", requests[0].RawBody, StringComparison.Ordinal);
+        Assert.Equal(("GET", "plan"), (requests[1].Method, requests[1].Route));
+        Assert.Equal("Bearer " + MockAuthTool.RefreshedToken, requests[1].Authorization);
+        Assert.Equal(MockAuthTool.RefreshedToken, File.ReadAllText(HomeConfigPath(sandbox, "effortlessapi_token.txt")));
+        var info = File.ReadAllText(HomeConfigPath(sandbox, "effortlessapi_token_info.json"));
+        Assert.Contains(MockAuthTool.RotatedRefreshToken, info, StringComparison.Ordinal);
+        Assert.Contains(ExistingEmail, info, StringComparison.Ordinal);
     }
 
     [Fact(DisplayName = "auth-set-api-key: setAccountAPIKey")]
@@ -477,21 +532,21 @@ public sealed class AuthTests
             """);
     }
 
-    private static void WriteGlobalToken(Sandbox sandbox, string token, string email)
+    private static void WriteGlobalToken(Sandbox sandbox, string token, string email, string? refreshToken = null)
     {
         sandbox.WriteHomeFile(".effortless/effortlessapi_token.txt", token);
         sandbox.WriteHomeFile(
             ".effortless/effortlessapi_token_info.json",
-            JsonSerializer.Serialize(new { Token = token, Email = email }));
+            JsonSerializer.Serialize(new { Token = token, Email = email, RefreshToken = refreshToken }));
     }
 
     private static string HomeConfigPath(Sandbox sandbox, string fileName) =>
         Path.Combine(sandbox.HomePath, ".effortless", fileName);
 
-    private static string CreateJwt(string email)
+    private static string CreateJwt(string email, long exp = 4_102_444_800L)
     {
         var header = Base64Url("""{"alg":"none","typ":"JWT"}""");
-        var payload = Base64Url(JsonSerializer.Serialize(new { email, exp = 4_102_444_800L }));
+        var payload = Base64Url(JsonSerializer.Serialize(new { email, exp }));
         return $"{header}.{payload}.";
     }
 

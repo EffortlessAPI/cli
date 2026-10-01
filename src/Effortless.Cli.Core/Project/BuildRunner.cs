@@ -1,5 +1,8 @@
 #nullable enable
 using Effortless.Cli;
+using Effortless.Cli.Config;
+using Effortless.Cli.Seeds;
+using Newtonsoft.Json.Linq;
 
 namespace Effortless.Cli.Project;
 
@@ -9,16 +12,57 @@ public class BuildRunner
     private readonly Func<string, EffortlessProject, bool, BuildErrorLog, int>
         _runCommandLine;
     private readonly BuildErrorLog _buildErrorLog;
+    private readonly SeedLicenseClient _licenses;
     private List<string> _projectFiles = new List<string>();
 
     public BuildRunner(
         EffortlessProject project,
         Func<string, EffortlessProject, bool, BuildErrorLog, int> runCommandLine,
-        BuildErrorLog buildErrorLog)
+        BuildErrorLog buildErrorLog,
+        SeedLicenseClient? licenses = null)
     {
         _project = project;
         _runCommandLine = runCommandLine;
         _buildErrorLog = buildErrorLog;
+        _licenses = licenses ?? new SeedLicenseClient();
+    }
+
+    /// <summary>
+    /// If this project carries a bound seed license, rechecks it with the
+    /// service before any transpiler runs. Gates on nothing but a revoked or
+    /// wrong-seed key today (see SeedLicenseChecks' table description in the
+    /// identity rulebook) -- an unreachable service is a non-fatal warning,
+    /// never a build failure, since this check does not yet stand for
+    /// anything the build cannot proceed without.
+    /// </summary>
+    private void CheckSeedLicense()
+    {
+        var env = EnvFile.LoadFrom(_project.RootPath);
+        var licenseKey = env?.GetValue("EFFORTLESS_SEED_LICENSE_KEY");
+        if (string.IsNullOrWhiteSpace(licenseKey))
+        {
+            return;
+        }
+
+        var state = _licenses.Check(licenseKey, seedId: null, out var error);
+        if (state is null)
+        {
+            Console.WriteLine(
+                $"Warning: could not recheck this project's seed license ({error}). Continuing.");
+            return;
+        }
+
+        var usable = state["usable"]?.Value<bool?>() ?? true;
+        if (usable)
+        {
+            return;
+        }
+
+        var reason = state["reason"]?.Value<string>();
+        var revokedReason = state["revokedReason"]?.Value<string>();
+        var detail = string.IsNullOrWhiteSpace(revokedReason) ? reason : $"{reason} ({revokedReason})";
+        throw new SeedLicenseRevokedException(
+            $"This project's seed license is no longer usable: {detail}. Building has stopped.");
     }
 
     public void RebuildAll(
@@ -72,6 +116,8 @@ public class BuildRunner
         bool continueOnError = false,
         bool withSubprojects = false)
     {
+        CheckSeedLicense();
+
         if (!isBuildLocal)
         {
             CheckIfParentIsRootSeed();

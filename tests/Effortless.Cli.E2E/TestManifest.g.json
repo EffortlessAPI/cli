@@ -2024,6 +2024,22 @@
     "interactive": false
   },
   {
+    "id": "auth-login-bad-code-is-clear-error",
+    "suite": "e2e-auth",
+    "priority": "P0",
+    "status": "green",
+    "slow": false,
+    "interactive": false
+  },
+  {
+    "id": "auth-plan-refreshes-expired-token",
+    "suite": "e2e-auth",
+    "priority": "P1",
+    "status": "green",
+    "slow": false,
+    "interactive": false
+  },
+  {
     "id": "local-tool-resolves-before-catalog",
     "suite": "e2e-local-tools",
     "priority": "P0",

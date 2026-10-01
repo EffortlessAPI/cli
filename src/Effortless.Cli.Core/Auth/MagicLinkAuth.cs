@@ -9,9 +9,11 @@ namespace Effortless.Cli.Auth;
 /// <summary>
 /// The CLI side of the authentication seam (step 13, D18). login / projectLogin /
 /// plan / logout call the published <c>effortless/effortless/effortless-auth</c>
-/// tool, resolved through the normal catalog path. The service does not enforce
-/// accounts yet, so every command tells the truth with the preview line. Tool
-/// execution and buildOnTrigger never call this.
+/// tool, resolved through the normal catalog path; that tool passes sign-in
+/// through to the Effortless Identity API. Sign-in is real (an emailed code for
+/// a signed access token plus a refresh token), but no tool enforces accounts
+/// yet, and project sign-in is still a preview. Tool execution and
+/// buildOnTrigger never call this.
 /// </summary>
 public sealed class MagicLinkAuth
 {
@@ -21,7 +23,7 @@ public sealed class MagicLinkAuth
     public const string PreviewSuffix =
         "(preview: the authentication service does not enforce accounts yet)";
 
-    public const string SignedInMessage = "Signed in " + PreviewSuffix + ".";
+    public const string SignedInMessage = "Signed in (no tool enforces accounts yet).";
     public const string ProjectSignedInMessage = "Project signed in " + PreviewSuffix + ".";
 
     private readonly Func<string> _resolveAuthToolUrl;
@@ -53,7 +55,10 @@ public sealed class MagicLinkAuth
         _stdout = stdout ?? Console.Out;
     }
 
-    /// <summary>POST /login with the prompted email; stores the returned token.</summary>
+    /// <summary>
+    /// POST /login emails a 6-digit code to the prompted address; POST /verify
+    /// exchanges it for an access token and a refresh token, which are stored.
+    /// </summary>
     public int Login()
     {
         var existingEmail = _jwtStore.IsAuthenticated()
@@ -79,26 +84,82 @@ public sealed class MagicLinkAuth
             return -1;
         }
 
-        if (!TryCall(HttpMethod.Post, "login", new JObject { ["email"] = email }, out var response))
+        if (!TryCall(HttpMethod.Post, "login", new JObject { ["email"] = email }, out _))
         {
             return -1;
         }
 
-        var token = response?["token"]?.Value<string>();
+        _stdout.WriteLine($"A sign-in code was sent to {email}.");
+        _stdout.Write("Code: ");
+        var code = _stdin.ReadLine()?.Trim();
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            Console.Error.WriteLine("The code from the sign-in email is required.");
+            return -1;
+        }
+
+        if (!TryCall(
+                HttpMethod.Post,
+                "verify",
+                new JObject { ["email"] = email, ["code"] = code },
+                out var response))
+        {
+            return -1;
+        }
+
+        var token = response?["access_token"]?.Value<string>()
+            ?? response?["token"]?.Value<string>();
         if (string.IsNullOrWhiteSpace(token))
         {
             Console.Error.WriteLine(
-                $"The authentication service accepted the sign-in but returned no token: {response}");
+                $"The authentication service accepted the code but returned no token: {Trim(response?.ToString())}");
             return -1;
         }
 
-        if (!_jwtStore.StoreJWTToken(token, email))
+        if (!_jwtStore.StoreJWTToken(token, email, response?["refresh_token"]?.Value<string>()))
         {
             return -1;
         }
 
         _stdout.WriteLine($"{SignedInMessage} Signed in as {email}.");
         return 0;
+    }
+
+    /// <summary>
+    /// Trades the stored refresh token for a new access token when the stored
+    /// one has expired. Returns the token to use: the new one, or the stored
+    /// one unchanged when no refresh was needed or possible.
+    /// </summary>
+    public string RefreshStoredTokenIfExpired()
+    {
+        var stored = _jwtStore.GetStoredJWTToken();
+        var refreshToken = _jwtStore.GetStoredRefreshToken();
+        if (string.IsNullOrEmpty(stored)
+            || string.IsNullOrEmpty(refreshToken)
+            || !JwtStore.IsJwtExpired(stored))
+        {
+            return stored;
+        }
+
+        if (!TryCall(
+                HttpMethod.Post,
+                "refresh",
+                new JObject { ["refresh_token"] = refreshToken },
+                out var response))
+        {
+            return stored;
+        }
+
+        var token = response?["access_token"]?.Value<string>();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return stored;
+        }
+
+        // A refresh that raced another one returns refresh_token: null; the
+        // stored refresh token is still the live one, so it is kept.
+        _jwtStore.StoreJWTToken(token, refreshToken: response?["refresh_token"]?.Value<string>());
+        return token;
     }
 
     /// <summary>POST /project-login for the current project; writes EFFORTLESS_JWT to effortless.env.</summary>
@@ -138,6 +199,11 @@ public sealed class MagicLinkAuth
     /// <summary>GET /plan; prints the plan and whether it is enforced.</summary>
     public int Subscription(string jwt)
     {
+        if (!string.IsNullOrEmpty(jwt) && jwt == _jwtStore.GetStoredJWTToken())
+        {
+            jwt = RefreshStoredTokenIfExpired();
+        }
+
         if (!TryCall(HttpMethod.Get, "plan", null, out var response, jwt))
         {
             return -1;
@@ -164,10 +230,19 @@ public sealed class MagicLinkAuth
             : null;
     }
 
-    /// <summary>POST /logout, best effort: the local tokens are already cleared.</summary>
-    public void LogoutBestEffort(string jwt)
+    /// <summary>
+    /// POST /logout {refresh_token}, best effort: the local tokens are already
+    /// cleared. Revoking the refresh token ends the session server-side.
+    /// </summary>
+    public void LogoutBestEffort(string jwt, string refreshToken = null)
     {
-        TryCall(HttpMethod.Post, "logout", new JObject(), out _, jwt, quiet: true);
+        var body = new JObject();
+        if (!string.IsNullOrEmpty(refreshToken))
+        {
+            body["refresh_token"] = refreshToken;
+        }
+
+        TryCall(HttpMethod.Post, "logout", body, out _, jwt, quiet: true);
     }
 
     private bool TryCall(
