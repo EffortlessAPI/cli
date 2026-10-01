@@ -7,7 +7,11 @@ namespace Effortless.Cli.Config;
 
 public class JwtStore
 {
-    public bool StoreJWTToken(string jwtToken, string email = null)
+    /// <param name="refreshToken">
+    /// The identity service's refresh token. Null keeps the one already
+    /// stored: a refresh that raced another one returns no new refresh token.
+    /// </param>
+    public bool StoreJWTToken(string jwtToken, string email = null, string refreshToken = null)
     {
         try
         {
@@ -22,14 +26,20 @@ public class JwtStore
             string tokenInfoFile = Path.Combine(
                 configDirectory,
                 "effortlessapi_token_info.json");
+            refreshToken ??= GetStoredRefreshToken();
+            email ??= GetStoredEmail() ?? GetEmailFromJwt(jwtToken);
+            var exp = GetExpFromJwt(jwtToken);
             var tokenInfo = new
             {
                 Token = jwtToken,
                 Email = email,
+                RefreshToken = refreshToken,
                 CreatedAt = DateTime.UtcNow.ToString(
                     "yyyy-MM-ddTHH:mm:ssZ"),
-                ExpiresAt = DateTime.UtcNow.AddHours(24).ToString(
-                    "yyyy-MM-ddTHH:mm:ssZ")
+                ExpiresAt = exp == 0
+                    ? null
+                    : DateTimeOffset.FromUnixTimeSeconds(exp).UtcDateTime.ToString(
+                        "yyyy-MM-ddTHH:mm:ssZ")
             };
             File.WriteAllText(
                 tokenInfoFile,
@@ -68,7 +78,11 @@ public class JwtStore
         }
     }
 
-    public string GetStoredEmail()
+    public string GetStoredRefreshToken() => ReadTokenInfo("RefreshToken");
+
+    public string GetStoredEmail() => ReadTokenInfo("Email");
+
+    private string ReadTokenInfo(string property)
     {
         try
         {
@@ -79,7 +93,8 @@ public class JwtStore
             {
                 var info = JsonConvert.DeserializeObject<JObject>(
                     File.ReadAllText(tokenInfoFile));
-                return info?["Email"]?.ToString();
+                var value = info?[property]?.ToString();
+                return string.IsNullOrEmpty(value) ? null : value;
             }
         }
         catch
@@ -111,7 +126,7 @@ public class JwtStore
                 return true;
             }
 
-            var payloadBase64 = parts[1];
+            var payloadBase64 = parts[1].Replace('-', '+').Replace('_', '/');
             switch (payloadBase64.Length % 4)
             {
                 case 2:
@@ -183,7 +198,7 @@ public class JwtStore
                 return null;
             }
 
-            var payloadBase64 = parts[1];
+            var payloadBase64 = parts[1].Replace('-', '+').Replace('_', '/');
             switch (payloadBase64.Length % 4)
             {
                 case 2:
@@ -205,6 +220,38 @@ public class JwtStore
         }
     }
 
+    private static long GetExpFromJwt(string token)
+    {
+        try
+        {
+            var parts = (token ?? "").Split('.');
+            if (parts.Length != 3)
+            {
+                return 0;
+            }
+
+            var payloadBase64 = parts[1].Replace('-', '+').Replace('_', '/');
+            switch (payloadBase64.Length % 4)
+            {
+                case 2:
+                    payloadBase64 += "==";
+                    break;
+                case 3:
+                    payloadBase64 += "=";
+                    break;
+            }
+
+            var payload = JsonConvert.DeserializeObject<dynamic>(
+                Encoding.UTF8.GetString(
+                    Convert.FromBase64String(payloadBase64)));
+            return (long)(payload?.exp ?? 0);
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
     public static bool IsJwtExpired(string token)
     {
         try
@@ -220,7 +267,7 @@ public class JwtStore
                 return true;
             }
 
-            var payloadBase64 = parts[1];
+            var payloadBase64 = parts[1].Replace('-', '+').Replace('_', '/');
             switch (payloadBase64.Length % 4)
             {
                 case 2:

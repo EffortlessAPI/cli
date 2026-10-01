@@ -544,7 +544,7 @@ Magic-link login, project login, subscription, API keys.
 - Aliases: `auth`, `authenticate`
 - Bareword forms: `auth`, `login`, `authenticate`
 - Value type: `bool`
-- Help text: Sign in to EffortlessAPI (preview: the service does not enforce accounts yet)
+- Help text: Sign in to EffortlessAPI with an emailed code
 - Description: Email magic-link login.
 
 ### `-projectLogin`
@@ -590,6 +590,14 @@ An Effortless seed is a public GitHub repository with effortless.json at its roo
 - Value type: `bool`
 - Help text: Clones a public Effortless seed repository (account/repo, repo, or clone URL)
 - Description: Clone a public Effortless seed repository.
+
+### `-licenseKey`
+
+- Aliases: `lk`
+- Bareword forms: None
+- Value type: `string`
+- Help text: Seed license key to bind or recheck
+- Description: Bind or recheck a seed license key.
 
 ### `-listSeedSources`
 
@@ -663,7 +671,7 @@ Tools that live inside the project at effortless-tools/<name>/ and are hosted by
 - `~/.effortless/bridge_version_index` — Highest latestBridgeVersion.versionIndex applied so far.
 - `~/.effortless/update_available.json` — cliUpdateAvailable object from the last refresh (name, version, installLinks{windows,windowsArm,mac,macArm}). Still maintained; the banner that reads it is off by default.
 - `~/.effortless/effortlessapi_token.txt` — Global JWT.
-- `~/.effortless/effortlessapi_token_info.json` — { Token, Email, CreatedAt, ExpiresAt(+24h) }.
+- `~/.effortless/effortlessapi_token_info.json` — { Token, Email, RefreshToken, CreatedAt, ExpiresAt (the token's own exp) }.
 - `~/.effortless/seed_cache/<seed>/cache/**` — Files copied into a cloned seed. v2 does NOT apply it restored discovery, cloning and $key$ replacement only); the directory is still migrated by Open item recorded in ; implement or drop with an owner decision.
 - `<root>/effortless-seed.json (ssotme-seed.json from older seeds is also read; + seed-config-values.json, seed-secret-values.json)` — Seed replacement tokens ($key$) and interactive answers. Retained explicit $key$ replacement contract: effortless-seed.json lists { key, description, default?, secret? Airtable schema guessing is removed.
 - `~/.ssotme/` — User state directory of releases before 2026-09; copied to ~/.effortless on first run. copied (never moved) to ~/.effortless with renames: ssotme.key -> effortless.key, ssotme.<runAs>.key -> effortless.<runAs>.key, remote_tools/ssotme-tools.json -> remote_tools/effortless-tools.json, remote_tools/ssotme.json dropped, everything else same relative path. If both directories exist, ~/.effortless wins and ~/.ssotme is never read again (no merging). Migration failure is fatal.

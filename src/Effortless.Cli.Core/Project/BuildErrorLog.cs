@@ -20,6 +20,20 @@ public class TranspilerStepFailedException : Exception
     }
 }
 
+/// <summary>
+/// A seed license bound to this project has been revoked (or is for the
+/// wrong seed), per the recheck BuildRunner makes before any transpiler
+/// runs. This is the one thing a seed license check gates on today -- an
+/// available, bound-elsewhere, or expired key is logged, not fatal.
+/// </summary>
+public class SeedLicenseRevokedException : Exception
+{
+    public SeedLicenseRevokedException(string message)
+        : base(message)
+    {
+    }
+}
+
 public sealed class BuildErrorLog
 {
     public const string ErrorsFileName = "errors.json";

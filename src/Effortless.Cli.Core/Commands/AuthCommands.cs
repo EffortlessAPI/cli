@@ -58,10 +58,11 @@ public sealed class AuthCommands
         if (response is "y" or "yes")
         {
             var jwt = _jwtStore.GetStoredJWTToken();
+            var refreshToken = _jwtStore.GetStoredRefreshToken();
             _jwtStore.ClearAuthToken();
             Console.WriteLine("Logged out successfully.");
             // Local tokens are gone regardless; tell the service best-effort.
-            _auth.LogoutBestEffort(jwt);
+            _auth.LogoutBestEffort(jwt, refreshToken);
         }
         else
         {
