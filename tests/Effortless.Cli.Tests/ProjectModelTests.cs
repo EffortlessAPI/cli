@@ -92,6 +92,9 @@ public sealed class ProjectModelTests
     [InlineData("/usr/local/bin/effortless install echo", "echo")]
     [InlineData("effortless install echo", "echo")]
     [InlineData("ssotme echo -p x=1", "echo -p x=1")]
+    [InlineData("/home/u/.nvm/versions/node/v20/lib/node_modules/@effortlessapi/cli/node_modules/@effortlessapi/cli-linux-x64/bin/Effortless.Cli -install rulebook-to-postgres -i ../effortless-rulebook/effortless-rulebook.json", "rulebook-to-postgres -i ../effortless-rulebook/effortless-rulebook.json")]
+    [InlineData("/opt/homebrew/lib/node_modules/@effortlessapi/cli/bin/Effortless.Cli rulebook-to-postgres -i r.json -install", "rulebook-to-postgres -i r.json")]
+    [InlineData("\"C:\\Users\\u\\AppData\\Roaming\\npm\\node_modules\\@effortlessapi\\cli-win32-x64\\bin\\Effortless.Cli.exe\" -install echo -i a.txt", "echo -i a.txt")]
     public void CommandLinePrefixesAreStripped(string commandLine, string expected)
     {
         Assert.Equal(expected, ProjectTranspiler.CaptureCommandLine(commandLine));

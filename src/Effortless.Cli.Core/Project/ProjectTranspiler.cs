@@ -37,6 +37,11 @@ public class ProjectTranspiler
             commandLine = commandLine.Substring(lowerCli.IndexOf("/aic.exe") + "/aic.exe".Length);
         else if (lowerCli.Contains("/effortless.cli.dll"))
             commandLine = commandLine.Substring(lowerCli.IndexOf("/effortless.cli.dll") + "/effortless.cli.dll".Length);
+        // The published npm install runs the self-contained Effortless.Cli(.exe) binary.
+        else if (lowerCli.Contains("/effortless.cli.exe"))
+            commandLine = commandLine.Substring(lowerCli.IndexOf("/effortless.cli.exe") + "/effortless.cli.exe".Length);
+        else if (lowerCli.Contains("/effortless.cli"))
+            commandLine = commandLine.Substring(lowerCli.IndexOf("/effortless.cli") + "/effortless.cli".Length);
         else if (lowerCli.Contains("/ssotme.ost.cli.dll"))
             commandLine = commandLine.Substring(lowerCli.IndexOf("/ssotme.ost.cli.dll") + "/ssotme.ost.cli.dll".Length);
         else if (lowerCli.Contains("/aicapture.ost.cli.dll"))
@@ -78,6 +83,9 @@ public class ProjectTranspiler
             commandLine = commandLine.Substring("install ".Length);
         if (commandLine.StartsWith("-install "))
             commandLine = commandLine.Substring("-install ".Length);
+        // -install says what to do with the command; it is never part of the step that builds.
+        commandLine = string.Join(" ", commandLine.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(t => !t.Equals("-install", StringComparison.OrdinalIgnoreCase)));
 
         Console.WriteLine($"COMMAND LINE: {commandLine}");
         return commandLine;
